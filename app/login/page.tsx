@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { Store, ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock } from 'lucide-react'; // Agregado ArrowLeft
+import { Store, ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -39,6 +39,9 @@ export default function LoginPage() {
           email,
           password,
           options: {
+            // Redirige al usuario a esta URL después de confirmar el correo
+            // Asegúrate de configurar esto en Supabase Dashboard > Auth > URL Configuration
+            emailRedirectTo: `${location.origin}/auth/callback`,
             data: {
               full_name: fullName,
               phone: phone,
@@ -48,8 +51,11 @@ export default function LoginPage() {
 
         if (error) throw error;
         
-        alert("¡Cuenta creada con éxito! Bienvenido a la familia.");
-        router.push('/cliente/catalogo');
+        // CORRECCIÓN APLICADA: Mensaje claro y volver al login
+        alert("¡Casi listo! 📧 Hemos enviado un enlace de confirmación a tu correo. Por favor revísalo para activar tu cuenta.");
+        setIsRegister(false); // Cambiamos a la vista de Login para que esperen el correo
+        setFullName('');      // Limpiamos campos opcionales
+        setPhone('');
 
       } else {
         // --- LÓGICA DE LOGIN ---
@@ -58,7 +64,7 @@ export default function LoginPage() {
           password 
         });
         
-        if (authError) throw new Error("Correo o contraseña incorrectos.");
+        if (authError) throw new Error("Correo o contraseña incorrectos, o cuenta no verificada.");
 
         if (user) {
           // Consultar rol en la tabla 'perfiles'
@@ -96,7 +102,7 @@ export default function LoginPage() {
       <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-orange-200/40 rounded-full blur-[100px]" />
       <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-red-200/40 rounded-full blur-[100px]" />
 
-      {/* --- BOTÓN REGRESAR AL INICIO (NUEVO) --- */}
+      {/* --- BOTÓN REGRESAR AL INICIO --- */}
       <Link 
         href="/"
         className="absolute top-6 left-6 z-20 flex items-center gap-2 bg-white/80 backdrop-blur-sm hover:bg-white text-orange-700 px-4 py-2 rounded-full shadow-sm transition-all hover:shadow-md font-medium text-sm group"
