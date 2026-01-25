@@ -77,58 +77,112 @@ const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 
   </motion.div>
 );
 
-// --- COMPONENTE TOUR GUIDE (NUEVO) ---
+// --- COMPONENTE TOUR GUIDE (CORREGIDO) ---
 const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
     const [step, setStep] = useState(0);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+    const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
 
     const steps = [
         { 
             title: "¡Bienvenido a Bodega Jormard!", 
             desc: "Te presentamos tu nuevo panel de cliente. Aquí podrás hacer pedidos de forma rápida y sencilla.",
-            targetId: null // Centro
+            targetId: null 
         },
         { 
             title: "Navegación Principal", 
             desc: "Usa este menú para moverte entre la Tienda, tus Pedidos, Perfil y Soporte.",
-            targetId: 'tour-menu' 
+            targetId: 'tour-menu', // ID Desktop
+            mobileId: 'tour-menu-mobile' // ID Mobile
         },
         { 
             title: "Buscar Productos", 
             desc: "Encuentra rápidamente lo que necesitas escribiendo aquí.",
-            targetId: 'tour-search' 
+            targetId: 'tour-search',
+            mobileId: 'tour-search-mobile'
         },
         { 
             title: "Tu Carrito", 
             desc: "Aquí verás los productos que vas agregando y el total a pagar.",
-            targetId: 'tour-cart' 
+            targetId: 'tour-cart',
+            mobileId: 'tour-cart-mobile' 
         },
         { 
             title: "Categorías Rápidas", 
             desc: "Filtra los productos por categorías (Bebidas, Snacks, etc) con un solo toque.",
-            targetId: 'tour-categories' 
+            targetId: 'tour-categories',
+            mobileId: 'tour-categories' 
         }
     ];
 
-    // Calcular posición del elemento objetivo
+    // Calcular posición del elemento
     const updatePosition = () => {
         const currentStep = steps[step];
+        let el = null;
+        
+        // Intentar buscar ID desktop, si no existe o está oculto, buscar mobile
         if (currentStep.targetId) {
-            const el = document.getElementById(currentStep.targetId);
-            if (el) {
-                const rect = el.getBoundingClientRect();
-                setTargetRect(rect);
-                return;
+            el = document.getElementById(currentStep.targetId);
+            // Si el elemento desktop está oculto (display: none), intentar con el mobile
+            if (el && window.getComputedStyle(el).display === 'none' && currentStep.mobileId) {
+                el = document.getElementById(currentStep.mobileId);
             }
         }
-        setTargetRect(null);
+        // Si no hay ID desktop pero sí mobile
+        if (!el && currentStep.mobileId) {
+             el = document.getElementById(currentStep.mobileId);
+        }
+
+        if (el) {
+            const rect = el.getBoundingClientRect();
+            setTargetRect(rect);
+            
+            // Lógica inteligente de posición
+            const isSidebar = rect.height > window.innerHeight * 0.8; // ¿Es el menú lateral?
+            
+            if (isSidebar) {
+                // Si es sidebar, poner a la DERECHA
+                setTooltipStyle({
+                    top: '100px',
+                    left: `${rect.right + 20}px`,
+                    transform: 'none'
+                });
+            } else {
+                // Lógica estándar (Arriba/Abajo)
+                const spaceBelow = window.innerHeight - rect.bottom;
+                const showBelow = spaceBelow > 250; // Si hay espacio abajo
+
+                setTooltipStyle({
+                    top: showBelow ? `${rect.bottom + 20}px` : 'auto',
+                    bottom: !showBelow ? `${window.innerHeight - rect.top + 20}px` : 'auto',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '90%',
+                    maxWidth: '350px'
+                });
+            }
+        } else {
+            // Si no encuentra elemento o es paso 0, CENTRAR
+            setTargetRect(null);
+            setTooltipStyle({
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '90%',
+                maxWidth: '400px'
+            });
+        }
     };
 
     useLayoutEffect(() => {
         if (isOpen) {
-            updatePosition();
+            // Pequeño delay para asegurar que el DOM está listo
+            const timer = setTimeout(updatePosition, 100);
             window.addEventListener('resize', updatePosition);
-            return () => window.removeEventListener('resize', updatePosition);
+            return () => {
+                window.removeEventListener('resize', updatePosition);
+                clearTimeout(timer);
+            }
         }
     }, [step, isOpen]);
 
@@ -141,21 +195,20 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
 
     return (
         <div className="fixed inset-0 z-[100] overflow-hidden">
-            {/* Fondo con "Spotlight" usando clip-path o box-shadow */}
+            {/* Fondo con agujero (Spotlight) */}
             <motion.div 
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
                 className="absolute inset-0 transition-all duration-500 ease-in-out"
                 style={{
                     background: 'rgba(0,0,0,0.7)',
-                    // Truco CSS para hacer el hueco (spotlight)
                     clipPath: targetRect 
                         ? `polygon(0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%, ${targetRect.left}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.top}px)`
                         : undefined
                 }}
             />
 
-            {/* Anillo pulsante alrededor del objetivo */}
+            {/* Anillo pulsante */}
             {targetRect && (
                 <motion.div
                     layoutId="tour-ring"
@@ -165,6 +218,7 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
                         left: targetRect.left - 4,
                         width: targetRect.width + 8,
                         height: targetRect.height + 8,
+                        borderRadius: steps[step].targetId?.includes('menu') ? '0px' : '12px' // Sidebar cuadrado
                     }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 />
@@ -173,19 +227,11 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
             {/* Tarjeta de Información */}
             <motion.div 
                 key={step}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="absolute w-[90%] max-w-sm bg-white p-6 rounded-3xl shadow-2xl"
-                style={{
-                    // Posicionamiento inteligente (Si el target está muy abajo, poner la card arriba)
-                    top: targetRect && targetRect.top > window.innerHeight / 2 
-                        ? (targetRect.top - 200 > 20 ? targetRect.top - 220 : 20) 
-                        : (targetRect ? targetRect.bottom + 20 : '50%'),
-                    left: '50%',
-                    transform: 'translate(-50%, 0)',
-                    marginTop: !targetRect ? '-100px' : 0 // Centrar si no hay target
-                }}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="absolute bg-white p-6 rounded-3xl shadow-2xl"
+                style={tooltipStyle}
             >
                 <div className="flex justify-between items-start mb-4">
                     <div className="bg-orange-100 p-2 rounded-full text-orange-600">
@@ -202,7 +248,7 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
                         onClick={handleNext} 
                         className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors shadow-lg shadow-orange-100 flex items-center gap-2"
                     >
-                        {step === steps.length - 1 ? '¡Empezar!' : 'Siguiente'} <ArrowRight size={16}/>
+                        {step === steps.length - 1 ? '¡Listo!' : 'Siguiente'} <ArrowRight size={16}/>
                     </button>
                 </div>
             </motion.div>
@@ -210,7 +256,7 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
     );
 };
 
-// --- COMPONENTE: TARJETA DE PEDIDO ---
+// --- COMPONENTE: TARJETA DE PEDIDO (SIN CAMBIOS) ---
 const OrderCard = ({ order }: { order: Pedido }) => {
   const [expanded, setExpanded] = useState(false);
   const statusColors = { pendiente: 'bg-yellow-50 text-yellow-700 border-yellow-200', pagado: 'bg-purple-50 text-purple-700 border-purple-200', atendido: 'bg-green-50 text-green-700 border-green-200', cancelado: 'bg-red-50 text-red-700 border-red-200' };
