@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -10,7 +10,7 @@ import {
   Trash2, MapPin, Bike, CheckCircle2, ArrowRight, 
   Clock, Package, Loader2, Zap, LocateFixed, Map as MapIcon,
   Image as ImageIcon, ChevronDown, ChevronUp, Banknote, Smartphone, 
-  Upload, MessageCircle, Copy, Menu, User, Settings, HelpCircle, Info, Camera, Edit2
+  Upload, MessageCircle, Copy, Menu, User, Settings, HelpCircle, Info, Camera, Edit2, PlayCircle
 } from 'lucide-react';
 
 // --- IMPORTACIÓN DINÁMICA DEL MAPA ---
@@ -76,6 +76,139 @@ const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 
     <span className="font-bold text-sm">{message}</span>
   </motion.div>
 );
+
+// --- COMPONENTE TOUR GUIDE (NUEVO) ---
+const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+    const [step, setStep] = useState(0);
+    const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+
+    const steps = [
+        { 
+            title: "¡Bienvenido a Bodega Jormard!", 
+            desc: "Te presentamos tu nuevo panel de cliente. Aquí podrás hacer pedidos de forma rápida y sencilla.",
+            targetId: null // Centro
+        },
+        { 
+            title: "Navegación Principal", 
+            desc: "Usa este menú para moverte entre la Tienda, tus Pedidos, Perfil y Soporte.",
+            targetId: 'tour-menu' 
+        },
+        { 
+            title: "Buscar Productos", 
+            desc: "Encuentra rápidamente lo que necesitas escribiendo aquí.",
+            targetId: 'tour-search' 
+        },
+        { 
+            title: "Tu Carrito", 
+            desc: "Aquí verás los productos que vas agregando y el total a pagar.",
+            targetId: 'tour-cart' 
+        },
+        { 
+            title: "Categorías Rápidas", 
+            desc: "Filtra los productos por categorías (Bebidas, Snacks, etc) con un solo toque.",
+            targetId: 'tour-categories' 
+        }
+    ];
+
+    // Calcular posición del elemento objetivo
+    const updatePosition = () => {
+        const currentStep = steps[step];
+        if (currentStep.targetId) {
+            const el = document.getElementById(currentStep.targetId);
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                setTargetRect(rect);
+                return;
+            }
+        }
+        setTargetRect(null);
+    };
+
+    useLayoutEffect(() => {
+        if (isOpen) {
+            updatePosition();
+            window.addEventListener('resize', updatePosition);
+            return () => window.removeEventListener('resize', updatePosition);
+        }
+    }, [step, isOpen]);
+
+    const handleNext = () => {
+        if (step < steps.length - 1) setStep(step + 1);
+        else onClose();
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] overflow-hidden">
+            {/* Fondo con "Spotlight" usando clip-path o box-shadow */}
+            <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                className="absolute inset-0 transition-all duration-500 ease-in-out"
+                style={{
+                    background: 'rgba(0,0,0,0.7)',
+                    // Truco CSS para hacer el hueco (spotlight)
+                    clipPath: targetRect 
+                        ? `polygon(0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%, ${targetRect.left}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.top}px)`
+                        : undefined
+                }}
+            />
+
+            {/* Anillo pulsante alrededor del objetivo */}
+            {targetRect && (
+                <motion.div
+                    layoutId="tour-ring"
+                    className="absolute border-2 border-orange-500 rounded-xl shadow-[0_0_20px_rgba(249,115,22,0.6)]"
+                    style={{
+                        top: targetRect.top - 4,
+                        left: targetRect.left - 4,
+                        width: targetRect.width + 8,
+                        height: targetRect.height + 8,
+                    }}
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                />
+            )}
+
+            {/* Tarjeta de Información */}
+            <motion.div 
+                key={step}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="absolute w-[90%] max-w-sm bg-white p-6 rounded-3xl shadow-2xl"
+                style={{
+                    // Posicionamiento inteligente (Si el target está muy abajo, poner la card arriba)
+                    top: targetRect && targetRect.top > window.innerHeight / 2 
+                        ? (targetRect.top - 200 > 20 ? targetRect.top - 220 : 20) 
+                        : (targetRect ? targetRect.bottom + 20 : '50%'),
+                    left: '50%',
+                    transform: 'translate(-50%, 0)',
+                    marginTop: !targetRect ? '-100px' : 0 // Centrar si no hay target
+                }}
+            >
+                <div className="flex justify-between items-start mb-4">
+                    <div className="bg-orange-100 p-2 rounded-full text-orange-600">
+                        {step === 0 ? <Store size={24}/> : <Info size={24}/>}
+                    </div>
+                    <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-md">{step + 1} / {steps.length}</span>
+                </div>
+                <h3 className="text-xl font-black text-gray-900 mb-2">{steps[step].title}</h3>
+                <p className="text-gray-500 text-sm leading-relaxed mb-6">{steps[step].desc}</p>
+                
+                <div className="flex justify-between items-center">
+                    <button onClick={onClose} className="text-gray-400 font-bold text-sm hover:text-gray-600">Omitir</button>
+                    <button 
+                        onClick={handleNext} 
+                        className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors shadow-lg shadow-orange-100 flex items-center gap-2"
+                    >
+                        {step === steps.length - 1 ? '¡Empezar!' : 'Siguiente'} <ArrowRight size={16}/>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
 
 // --- COMPONENTE: TARJETA DE PEDIDO ---
 const OrderCard = ({ order }: { order: Pedido }) => {
@@ -170,14 +303,15 @@ export default function ClientCatalog() {
   
   // UI States (Navegación)
   const [currentView, setCurrentView] = useState<'store' | 'orders' | 'profile' | 'support' | 'settings' | 'about'>('store');
-  const [isMenuOpen, setIsMenuOpen] = useState(false); // Para el sidebar en móvil
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // UI States (Modales)
+  // UI States (Modales y Tour)
   const [loading, setLoading] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [orderSuccessId, setOrderSuccessId] = useState<number | null>(null);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error' | 'offer'} | null>(null);
+  const [showTour, setShowTour] = useState(false); // Estado para el Tour
 
   // Estados Geolocalización
   const [isMapOpen, setIsMapOpen] = useState(false);
@@ -231,11 +365,16 @@ export default function ClientCatalog() {
           telefono: meta.phone || '', 
           avatar_url: meta.avatar_url 
       });
-      // Inicializar campos de edición
       setEditName(meta.full_name || '');
       setEditPhone(meta.phone || '');
 
       fetchMyOrders(user.id);
+      
+      // VERIFICAR TOUR
+      const hasSeenTour = localStorage.getItem('hasSeenTour');
+      if (!hasSeenTour) {
+          setTimeout(() => setShowTour(true), 1500); // Iniciar tour automáticamente si es nuevo
+      }
       
       supabase.channel('mis-pedidos-realtime').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `user_id=eq.${user.id}` }, (payload) => {
            const newOrder = payload.new as Pedido;
@@ -247,6 +386,11 @@ export default function ClientCatalog() {
     };
     initData();
   }, [router]);
+
+  const closeTour = () => {
+      setShowTour(false);
+      localStorage.setItem('hasSeenTour', 'true');
+  };
 
   const fetchProducts = async () => {
     const { data } = await supabase.from('productos').select('*').order('id', { ascending: false });
@@ -268,17 +412,14 @@ export default function ClientCatalog() {
       try {
           const fileName = `avatars/${userId}_${Date.now()}.${file.name.split('.').pop()}`;
           const { error: uploadError } = await supabase.storage.from('perfiles').upload(fileName, file, { upsert: true });
-          
           if (uploadError) throw uploadError;
 
           const { data: urlData } = supabase.storage.from('perfiles').getPublicUrl(fileName);
           const newAvatarUrl = urlData.publicUrl;
 
-          // Actualizar Auth Metadata
           const { error: updateError } = await supabase.auth.updateUser({
               data: { avatar_url: newAvatarUrl }
           });
-
           if (updateError) throw updateError;
 
           setUserData(prev => prev ? ({ ...prev, avatar_url: newAvatarUrl }) : null);
@@ -307,13 +448,13 @@ export default function ClientCatalog() {
       }
   };
 
-  // --- LOGOUT MEJORADO ---
+  // --- LOGOUT ---
   const handleLogout = async () => {
       await supabase.auth.signOut();
-      router.push('/'); // Redirige al Home, no al login
+      router.push('/'); 
   };
 
-  // --- GEOLOCALIZACIÓN Y FILTROS (Igual que antes) ---
+  // --- GEOLOCALIZACIÓN Y FILTROS ---
   useEffect(() => {
     let result = [...products];
     if (selectedCategory !== 'Todos') result = result.filter(p => p.categoria === selectedCategory);
@@ -404,7 +545,7 @@ export default function ClientCatalog() {
     setOrderSuccessId(null);
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
-    setCurrentView('orders'); // Ir a pedidos
+    setCurrentView('orders'); 
     setVoucherFile(null);
   };
 
@@ -414,8 +555,8 @@ export default function ClientCatalog() {
           case 'store':
               return (
                   <>
-                      {/* Categorías */}
-                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full mb-4 sticky top-[65px] z-20 bg-gray-50/95 backdrop-blur-sm py-2">
+                      {/* Categorías (Con ID para el tour) */}
+                      <div id="tour-categories" className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full mb-4 sticky top-[65px] z-20 bg-gray-50/95 backdrop-blur-sm py-2">
                         {categories.map((cat) => (
                           <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${selectedCategory === cat ? 'bg-gray-900 text-white border-gray-900 shadow-md transform scale-105' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{cat}</button>
                         ))}
@@ -473,7 +614,6 @@ export default function ClientCatalog() {
                        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
                            <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 relative"></div>
                            <div className="px-6 pb-6 relative">
-                               {/* Avatar */}
                                <div className="w-24 h-24 rounded-full bg-white p-1 absolute -top-12 left-1/2 -translate-x-1/2 shadow-lg group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
                                    <div className="w-full h-full rounded-full bg-gray-200 overflow-hidden relative">
                                         {avatarUploading ? (
@@ -483,7 +623,6 @@ export default function ClientCatalog() {
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400">{userData?.nombre.charAt(0)}</div>
                                         )}
-                                        {/* Overlay de cámara */}
                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                                             <Camera className="w-6 h-6 text-white"/>
                                         </div>
@@ -546,6 +685,13 @@ export default function ClientCatalog() {
                                 <button onClick={() => window.open('tel:961241085')} className="flex-1 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 flex items-center justify-center gap-2"><Smartphone className="w-5 h-5"/> Llamar</button>
                             </div>
                         </div>
+                        <div className="bg-blue-50 p-4 rounded-xl flex items-center justify-between">
+                            <div>
+                                <h4 className="font-bold text-blue-900">¿Cómo funciona la App?</h4>
+                                <p className="text-xs text-blue-700">Ver el tutorial de bienvenida</p>
+                            </div>
+                            <button onClick={() => setShowTour(true)} className="bg-white text-blue-600 p-2 rounded-lg shadow-sm hover:scale-105 transition"><PlayCircle className="w-6 h-6"/></button>
+                        </div>
                         <div>
                             <h3 className="font-bold text-gray-900 mb-3 ml-1">Preguntas Frecuentes</h3>
                             <div className="space-y-2">
@@ -597,6 +743,11 @@ export default function ClientCatalog() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-orange-200">
       
+      {/* TOUR GUIDE OVERLAY */}
+      <AnimatePresence>
+         {showTour && <TourGuide isOpen={showTour} onClose={closeTour} />}
+      </AnimatePresence>
+
       {/* MAPA */}
       {isMapOpen && <LocationMap onConfirm={(lat, lng) => { setIsMapOpen(false); fetchAddressFromCoords(lat, lng); }} onCancel={() => setIsMapOpen(false)} />}
       <AnimatePresence>{toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
@@ -638,7 +789,7 @@ export default function ClientCatalog() {
 
       {/* --- LAYOUT DESKTOP (Sidebar fijo a la izquierda) --- */}
       <div className="lg:flex">
-          <aside className="hidden lg:flex w-64 h-screen sticky top-0 bg-white border-r border-gray-100 flex-col z-20">
+          <aside id="tour-menu" className="hidden lg:flex w-64 h-screen sticky top-0 bg-white border-r border-gray-100 flex-col z-20">
              <div className="p-6 border-b border-gray-100 flex items-center gap-2">
                  <div className="bg-orange-500 p-1.5 rounded-lg text-white"><Store className="w-6 h-6"/></div>
                  <span className="font-black text-xl tracking-tight">Jormard</span>
@@ -668,11 +819,11 @@ export default function ClientCatalog() {
           <div className="flex-1 min-h-screen">
               {/* HEADER MOVIL */}
               <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-100 px-4 py-3 flex lg:hidden items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div id="tour-menu-mobile" className="flex items-center gap-3">
                     <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Menu className="w-6 h-6"/></button>
                     <h1 className="font-extrabold text-lg leading-none tracking-tight">{currentView === 'store' ? 'Jormard' : currentView === 'orders' ? 'Mis Pedidos' : currentView === 'profile' ? 'Perfil' : 'Bodega'}</h1>
                 </div>
-                <button onClick={() => setIsCartOpen(true)} className="relative p-2 hover:bg-orange-50 rounded-full group transition-colors">
+                <button id="tour-cart-mobile" onClick={() => setIsCartOpen(true)} className="relative p-2 hover:bg-orange-50 rounded-full group transition-colors">
                   <ShoppingCart className="w-6 h-6 text-gray-600 group-hover:text-orange-600 transition-colors" />
                   {cart.length > 0 && (<span className="absolute top-1 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-sm animate-in zoom-in">{cart.reduce((acc, item) => acc + item.cantidad, 0)}</span>)}
                 </button>
@@ -683,12 +834,12 @@ export default function ClientCatalog() {
                    <h2 className="text-2xl font-black text-gray-900">{currentView === 'store' ? 'Tienda' : currentView === 'orders' ? 'Historial de Pedidos' : currentView === 'profile' ? 'Mi Perfil' : currentView === 'support' ? 'Ayuda' : 'Configuración'}</h2>
                    <div className="flex items-center gap-4">
                        {currentView === 'store' && (
-                           <div className="relative group w-80">
+                           <div id="tour-search" className="relative group w-80">
                                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
                                 <input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-100/50 border border-gray-200 rounded-xl py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"/>
                            </div>
                        )}
-                       <button onClick={() => setIsCartOpen(true)} className="relative p-3 bg-gray-100 hover:bg-orange-50 rounded-xl group transition-colors flex items-center gap-2">
+                       <button id="tour-cart" onClick={() => setIsCartOpen(true)} className="relative p-3 bg-gray-100 hover:bg-orange-50 rounded-xl group transition-colors flex items-center gap-2">
                            <ShoppingCart className="w-5 h-5 text-gray-600 group-hover:text-orange-600" />
                            <span className="font-bold text-sm text-gray-700">S/ {totalCartPrice.toFixed(2)}</span>
                            {cart.length > 0 && (<span className="bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">{cart.reduce((acc, item) => acc + item.cantidad, 0)}</span>)}
@@ -700,7 +851,7 @@ export default function ClientCatalog() {
               <main className="p-4 sm:p-8 max-w-7xl mx-auto">
                  {/* Search móvil solo en Store */}
                  {currentView === 'store' && (
-                     <div className="lg:hidden mb-4 relative">
+                     <div id="tour-search-mobile" className="lg:hidden mb-4 relative">
                         <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
                         <input type="text" placeholder="¿Qué se te antoja?" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white shadow-sm border border-gray-100 rounded-2xl py-3 pl-11 pr-4 text-base focus:ring-2 focus:ring-orange-500 outline-none"/>
                      </div>
