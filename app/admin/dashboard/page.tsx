@@ -9,7 +9,7 @@ import {
   Plus, Trash2, BarChart3, Upload, FileSpreadsheet, X, Loader2, Menu, Clock, 
   CheckCircle2, MapPin, Eye, Banknote, Search, AlertTriangle, 
   TrendingUp, Copy, Bell, LogOut, Volume2, Zap, Timer, Pencil, XCircle,
-  Map, ExternalLink, HelpCircle, FileDown, ChevronRight, Flag
+  Map, ExternalLink, HelpCircle, FileDown, ChevronRight, Flag, Image as ImageIcon, Paperclip
 } from 'lucide-react';
 
 // --- TIPOS ---
@@ -43,6 +43,8 @@ interface Pedido {
   items: PedidoItem[];
   total: number;
   estado: 'pendiente' | 'pagado' | 'atendido' | 'cancelado';
+  comprobante_url?: string; // NUEVO
+  metodo_pago?: string;     // NUEVO
 }
 
 // --- LISTA DE CATEGORÍAS ---
@@ -96,14 +98,14 @@ const StepByStepGuide = ({ onClose }: { onClose: () => void }) => {
       desc: "Los pedidos llegan aquí.\n🟡 Amarillo: Falta pagar.\n🟣 Morado: Pagado (Yape/Plin).\n🟢 Verde: Entregado.\n¡Cambia el estado para mantener el orden!" 
     },
     { 
-      title: "2. Inventario Inteligente", 
-      icon: <Pencil className="w-12 h-12 text-blue-500"/>, 
-      desc: "Agrega productos manualmente o con Excel. Si subes un Excel con un nombre que ya existe, el sistema actualizará el precio y stock en lugar de duplicarlo." 
+      title: "2. Verificación de Pagos", 
+      icon: <ImageIcon className="w-12 h-12 text-purple-500"/>, 
+      desc: "Si un cliente paga con Yape/Plin, verás un clip 📎 en el pedido. Abre el pedido y podrás ver la foto del comprobante para verificar antes de despachar." 
     },
     { 
-      title: "3. Imágenes Fáciles", 
-      icon: <Search className="w-12 h-12 text-purple-500"/>, 
-      desc: "¿No tienes la foto a la mano? Sube el producto sin foto. Luego, usa el botón de la 'Lupa' en la lista para buscarla en Google y copiar el link." 
+      title: "3. Inventario Inteligente", 
+      icon: <Pencil className="w-12 h-12 text-blue-500"/>, 
+      desc: "Agrega productos manualmente o con Excel. Si subes un Excel con un nombre que ya existe, el sistema actualizará el precio y stock en lugar de duplicarlo." 
     },
     { 
       title: "4. Ofertas Flash", 
@@ -352,7 +354,7 @@ export default function AdminDashboard() {
     }
   };
   
-  // --- EXCEL LOGIC (MEJORADO CON UPSERT) ---
+  // --- EXCEL LOGIC ---
   const handleDownloadTemplate = () => {
     const templateData = [
       { Nombre: "Coca Cola 3L", Precio: 12.50, Stock: 50, Categoria: "Bebidas", Imagen: "https://ejemplo.com/foto.jpg" },
@@ -378,11 +380,9 @@ export default function AdminDashboard() {
           precio: parseFloat(row.precio || row.Precio || 0),
           stock: parseInt(row.stock || row.Stock || 0),
           categoria: row.categoria || row.Categoria || 'General',
-          // LOGICA INTELIGENTE DE IMAGEN: Si no hay link, pone el placeholder
           imagen_url: row.imagen_url || row.Imagen || row.imagen || '/placeholder.png'
         }));
         
-        // UPSERT: Si el nombre existe, actualiza. Si no, crea.
         const { error } = await supabase
             .from('productos')
             .upsert(formatted, { onConflict: 'nombre' });
@@ -467,20 +467,11 @@ export default function AdminDashboard() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* BOTÓN GUÍA */}
-          <button 
-            onClick={() => setShowGuide(true)}
-            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
-            title="Guía de Uso"
-          >
+          <button onClick={() => setShowGuide(true)} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all" title="Guía de Uso">
             <HelpCircle className="w-6 h-6" />
           </button>
 
-          <button 
-            onClick={() => { playNotificationSound(); showToast("Sonido Activado 🔊", 'success'); }}
-            className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-full transition-all"
-            title="Activar/Probar Sonido"
-          >
+          <button onClick={() => { playNotificationSound(); showToast("Sonido Activado 🔊", 'success'); }} className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-full transition-all" title="Activar/Probar Sonido">
             <Volume2 className="w-5 h-5" />
           </button>
 
@@ -532,6 +523,15 @@ export default function AdminDashboard() {
                     {order.estado === 'pendiente' && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm">POR PAGAR</div>}
                     {order.estado === 'pagado' && <div className="absolute top-0 right-0 bg-purple-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm flex gap-1 items-center"><CheckCircle2 className="w-3 h-3"/> LISTO PARA ENVÍO</div>}
                     
+                    {/* INDICADOR DE PAGO ADJUNTO (NUEVO) */}
+                    {order.comprobante_url && order.estado === 'pendiente' && (
+                        <div className="absolute top-8 right-3 animate-pulse" title="Voucher Adjunto">
+                            <div className="bg-purple-100 text-purple-700 p-1.5 rounded-full shadow-sm border border-purple-200">
+                                <Paperclip className="w-4 h-4" />
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex justify-between items-start mb-4 pl-2">
                         <div>
                           <h3 className="font-bold text-gray-900 text-lg group-hover:text-orange-600 transition-colors">{order.cliente_nombre}</h3>
@@ -545,8 +545,14 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="flex justify-between items-end pl-2 pt-2 border-t border-gray-100/50">
-                        <div className="text-xs text-gray-500 font-medium">
+                        <div className="text-xs text-gray-500 font-medium flex items-center gap-2">
                           <span className="bg-gray-100 px-2 py-1 rounded-md text-gray-700">{order.items.length} items</span>
+                          {/* INDICADOR DE MÉTODO DE PAGO */}
+                          {order.metodo_pago === 'yape' ? (
+                             <span className="text-purple-600 font-bold text-[10px] uppercase">📱 Yape/Plin</span>
+                          ) : (
+                             <span className="text-green-600 font-bold text-[10px] uppercase">💵 Efectivo</span>
+                          )}
                         </div>
                         <div className="text-xl font-black text-gray-900">
                           S/ {order.total.toFixed(2)}
@@ -560,14 +566,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* --- VISTA INVENTARIO --- */}
+        {/* --- VISTA INVENTARIO (Sin cambios mayores) --- */}
         {activeTab === 'inventario' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Formulario Productos (Agregar o Editar) */}
+            {/* ... (Formulario de Productos Igual que antes) ... */}
             <div className="lg:col-span-1" ref={formTopRef}>
               <div className={`bg-white p-6 rounded-2xl shadow-sm border sticky top-24 transition-colors ${editingId ? 'border-orange-300 ring-2 ring-orange-100' : 'border-gray-100'}`}>
-                
-                {/* Header del Formulario */}
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-black flex items-center gap-2">
                         {editingId ? <Pencil className="w-5 h-5 text-orange-600"/> : <Plus className="w-5 h-5 text-orange-500"/>} 
@@ -685,9 +689,9 @@ export default function AdminDashboard() {
                   <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`bg-white p-3 rounded-2xl border flex gap-4 relative group hover:shadow-md transition-all ${editingId === p.id ? 'border-orange-400 ring-2 ring-orange-100' : 'border-gray-100 hover:border-orange-200'}`}>
                       <div className="w-20 h-20 bg-gray-50 rounded-xl flex-shrink-0 relative overflow-hidden">
                          <img 
-                            src={p.imagen_url} 
-                            className="w-full h-full object-cover rounded-xl" 
-                            onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} 
+                           src={p.imagen_url} 
+                           className="w-full h-full object-cover rounded-xl" 
+                           onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} 
                          />
                          {p.oferta_activa && <div className="absolute -top-2 -left-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10">OFERTA</div>}
                       </div>
@@ -698,7 +702,6 @@ export default function AdminDashboard() {
                           </div>
                           <p className="text-xs text-gray-500 font-medium mb-1">{p.categoria}</p>
                           
-                          {/* PRECIO VISUALIZACIÓN */}
                           <div className="flex justify-between items-end mt-2">
                              <span className={`text-xs font-bold px-2 py-0.5 rounded ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>Stock: {p.stock}</span>
                              <div className="text-right">
@@ -714,9 +717,7 @@ export default function AdminDashboard() {
                           </div>
                       </div>
                       
-                      {/* BOTONES ACCIÓN */}
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {/* BOTÓN BUSCAR IMAGEN GOOGLE */}
                           <button 
                             onClick={() => window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(p.nombre + ' producto peru')}`, '_blank')}
                             className="p-2 bg-white shadow-sm border border-gray-100 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" 
@@ -764,6 +765,37 @@ export default function AdminDashboard() {
                 
                 <div className="p-6 max-h-[60vh] overflow-y-auto">
                     
+                    {/* --- TARJETA EVIDENCIA DE PAGO (NUEVO) --- */}
+                    {selectedOrder.metodo_pago === 'yape' && selectedOrder.comprobante_url && (
+                        <div className="mb-6 bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group">
+                           <div className="absolute top-0 right-0 bg-purple-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10">EVIDENCIA</div>
+                           <div className="h-20 w-20 rounded-xl bg-gray-200 flex-shrink-0 overflow-hidden cursor-pointer shadow-sm border border-purple-100" onClick={() => window.open(selectedOrder.comprobante_url, '_blank')}>
+                              <img src={selectedOrder.comprobante_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                           </div>
+                           <div className="flex-1">
+                               <p className="text-sm font-bold text-purple-900 uppercase">Pago con Yape/Plin</p>
+                               <p className="text-xs text-purple-600 mb-2">Comprobante adjunto por el cliente.</p>
+                               <button 
+                                 onClick={() => window.open(selectedOrder.comprobante_url, '_blank')}
+                                 className="text-xs bg-white border border-purple-200 text-purple-700 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 hover:bg-purple-100 transition-colors"
+                               >
+                                  <Eye className="w-3 h-3"/> Ver Voucher Grande
+                               </button>
+                           </div>
+                        </div>
+                    )}
+
+                    {selectedOrder.metodo_pago === 'yape' && !selectedOrder.comprobante_url && (
+                        <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-center gap-3">
+                           <AlertTriangle className="w-6 h-6 text-yellow-600"/>
+                           <div>
+                               <p className="text-sm font-bold text-yellow-900">Pago Yape sin Evidencia</p>
+                               <p className="text-xs text-yellow-700">El cliente marcó Yape pero no subió foto. Verifica manualmente.</p>
+                           </div>
+                        </div>
+                    )}
+                    {/* -------------------------------------- */}
+
                     {/* DATOS CLIENTE & DIRECCIÓN */}
                     <div className="bg-gray-50 border border-gray-100 p-5 rounded-2xl mb-6 space-y-3">
                       <div className="flex items-start gap-3">
@@ -774,7 +806,6 @@ export default function AdminDashboard() {
                           </div>
                       </div>
                       
-                      {/* --- SECCIÓN DIRECCIÓN Y MAPA --- */}
                       <div className="flex items-start gap-3">
                           <div className="bg-white p-2 rounded-lg shadow-sm">
                               <MapPin className="w-4 h-4 text-gray-900"/>
@@ -785,7 +816,6 @@ export default function AdminDashboard() {
                                 {selectedOrder.tipo_entrega === 'delivery' ? selectedOrder.direccion : 'Recojo en Tienda'}
                             </p>
                             
-                            {/* BOTÓN MAPA: Solo si es delivery */}
                             {selectedOrder.tipo_entrega === 'delivery' && (
                                 <button 
                                     onClick={() => handleOpenMap(selectedOrder.direccion)}
@@ -817,7 +847,10 @@ export default function AdminDashboard() {
                     </div>
                     
                     <div className="flex justify-between items-center mt-6 pt-6 border-t border-gray-100">
-                        <span className="text-gray-500 font-medium">Total a cobrar</span>
+                        <div className="flex flex-col">
+                            <span className="text-gray-500 font-medium text-sm">Total a cobrar</span>
+                            <span className="text-[10px] text-gray-400 uppercase font-bold">{selectedOrder.metodo_pago === 'yape' ? 'Vía Yape/Plin' : 'En Efectivo'}</span>
+                        </div>
                         <span className="text-3xl font-black text-gray-900">S/ {selectedOrder.total.toFixed(2)}</span>
                     </div>
                 </div>
@@ -827,7 +860,7 @@ export default function AdminDashboard() {
                     <div className="flex gap-3">
                       <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'cancelado')} className="flex-1 py-4 rounded-xl border-2 border-gray-200 font-bold text-gray-400 hover:border-red-200 hover:text-red-500 hover:bg-red-50 transition-all">Cancelar</button>
                       <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'pagado')} className="flex-[2] py-4 rounded-xl bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-lg shadow-purple-200 flex items-center justify-center gap-2 transform active:scale-95 transition-all">
-                          <Banknote className="w-5 h-5" /> Confirmar Pago Yape
+                          <Banknote className="w-5 h-5" /> Confirmar Pago
                       </button>
                     </div>
                   )}
