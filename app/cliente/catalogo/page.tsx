@@ -10,7 +10,8 @@ import {
   Trash2, MapPin, Bike, CheckCircle2, ArrowRight, 
   Clock, Package, Loader2, Zap, LocateFixed, Map as MapIcon,
   Image as ImageIcon, ChevronDown, ChevronUp, Banknote, Smartphone, 
-  Upload, MessageCircle, Copy, Menu, User, Settings, HelpCircle, Info, Camera, Edit2, PlayCircle
+  Upload, MessageCircle, Copy, Menu, User, Settings, HelpCircle, Info, Camera, Edit2, PlayCircle,
+  ChevronLeft, ChevronRight, Heart, Home
 } from 'lucide-react';
 
 // --- IMPORTACIÓN DINÁMICA DEL MAPA ---
@@ -50,6 +51,12 @@ interface Pedido {
   comprobante_url?: string;
 }
 
+interface UserAddress {
+    id: number;
+    alias: string;
+    direccion: string;
+}
+
 // --- HELPER: VERIFICAR OFERTA ---
 const isOfferActive = (prod: Producto): boolean => {
   if (!prod.oferta_activa || !prod.precio_oferta) return false;
@@ -77,7 +84,7 @@ const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 
   </motion.div>
 );
 
-// --- COMPONENTE TOUR GUIDE (CORREGIDO) ---
+// --- COMPONENTE TOUR GUIDE MEJORADO ---
 const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
     const [step, setStep] = useState(0);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
@@ -86,49 +93,77 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
     const steps = [
         { 
             title: "¡Bienvenido a Bodega Jormard!", 
-            desc: "Te presentamos tu nuevo panel de cliente. Aquí podrás hacer pedidos de forma rápida y sencilla.",
+            desc: "Tu panel de compras inteligente. Vamos a dar un recorrido rápido por las funciones principales.",
             targetId: null 
         },
         { 
-            title: "Navegación Principal", 
-            desc: "Usa este menú para moverte entre la Tienda, tus Pedidos, Perfil y Soporte.",
-            targetId: 'tour-menu', // ID Desktop
-            mobileId: 'tour-menu-mobile' // ID Mobile
-        },
-        { 
-            title: "Buscar Productos", 
-            desc: "Encuentra rápidamente lo que necesitas escribiendo aquí.",
+            title: "Buscador Inteligente", 
+            desc: "Escribe aquí para encontrar rápidamente bebidas, snacks o cualquier producto.",
             targetId: 'tour-search',
             mobileId: 'tour-search-mobile'
         },
         { 
-            title: "Tu Carrito", 
-            desc: "Aquí verás los productos que vas agregando y el total a pagar.",
-            targetId: 'tour-cart',
-            mobileId: 'tour-cart-mobile' 
-        },
-        { 
-            title: "Categorías Rápidas", 
-            desc: "Filtra los productos por categorías (Bebidas, Snacks, etc) con un solo toque.",
+            title: "Filtra por Categorías", 
+            desc: "Usa estas etiquetas para ver solo lo que te interesa con un clic.",
             targetId: 'tour-categories',
             mobileId: 'tour-categories' 
+        },
+        { 
+            title: "Tienda Principal", 
+            desc: "Aquí siempre encontrarás el catálogo completo de productos.",
+            targetId: 'nav-store', 
+            mobileId: 'nav-store-mobile'
+        },
+        { 
+            title: "Tus Favoritos", 
+            desc: "Guarda los productos que más compras para acceder a ellos rápidamente.",
+            targetId: 'nav-favorites', 
+            mobileId: 'nav-favorites-mobile'
+        },
+        { 
+            title: "Historial de Pedidos", 
+            desc: "Revisa el estado de tus compras (Pendiente, En Camino, Entregado) en tiempo real.",
+            targetId: 'nav-orders', 
+            mobileId: 'nav-orders-mobile'
+        },
+        { 
+            title: "Tu Perfil", 
+            desc: "Actualiza tu foto, nombre y teléfono de contacto aquí.",
+            targetId: 'nav-profile', 
+            mobileId: 'nav-profile-mobile'
+        },
+        { 
+            title: "Configuración", 
+            desc: "Controla las notificaciones, sonidos y limpia la memoria de la app.",
+            targetId: 'nav-settings', 
+            mobileId: 'nav-settings-mobile'
+        },
+        { 
+            title: "Ayuda y Soporte", 
+            desc: "¿Dudas? Contáctanos por WhatsApp o revisa las preguntas frecuentes.",
+            targetId: 'nav-support', 
+            mobileId: 'nav-support-mobile'
+        },
+        { 
+            title: "Tu Canasta", 
+            desc: "Aquí verás el total a pagar y podrás finalizar tu compra.",
+            targetId: 'tour-cart',
+            mobileId: 'tour-cart-mobile' 
         }
     ];
 
-    // Calcular posición del elemento
     const updatePosition = () => {
         const currentStep = steps[step];
         let el = null;
         
-        // Intentar buscar ID desktop, si no existe o está oculto, buscar mobile
+        // Prioridad: ID Desktop -> Si está oculto, buscar ID Mobile -> Si no existe Desktop, buscar Mobile
         if (currentStep.targetId) {
             el = document.getElementById(currentStep.targetId);
-            // Si el elemento desktop está oculto (display: none), intentar con el mobile
+            // Si existe pero está oculto (display none en móvil), buscar la versión mobile
             if (el && window.getComputedStyle(el).display === 'none' && currentStep.mobileId) {
                 el = document.getElementById(currentStep.mobileId);
             }
         }
-        // Si no hay ID desktop pero sí mobile
         if (!el && currentStep.mobileId) {
              el = document.getElementById(currentStep.mobileId);
         }
@@ -137,24 +172,24 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
             const rect = el.getBoundingClientRect();
             setTargetRect(rect);
             
-            // Lógica inteligente de posición
-            const isSidebar = rect.height > window.innerHeight * 0.8; // ¿Es el menú lateral?
+            // Detectar si es un elemento del Sidebar (izquierda)
+            const isSidebar = rect.left < 300 && rect.width > 150; 
             
             if (isSidebar) {
-                // Si es sidebar, poner a la DERECHA
                 setTooltipStyle({
-                    top: '100px',
-                    left: `${rect.right + 20}px`,
-                    transform: 'none'
+                    top: `${rect.top}px`,
+                    left: `${rect.right + 20}px`, // Mostrar a la derecha del botón
+                    transform: 'translateY(-10%)',
+                    width: '300px'
                 });
             } else {
                 // Lógica estándar (Arriba/Abajo)
                 const spaceBelow = window.innerHeight - rect.bottom;
-                const showBelow = spaceBelow > 250; // Si hay espacio abajo
+                const showBelow = spaceBelow > 250;
 
                 setTooltipStyle({
-                    top: showBelow ? `${rect.bottom + 20}px` : 'auto',
-                    bottom: !showBelow ? `${window.innerHeight - rect.top + 20}px` : 'auto',
+                    top: showBelow ? `${rect.bottom + 15}px` : 'auto',
+                    bottom: !showBelow ? `${window.innerHeight - rect.top + 15}px` : 'auto',
                     left: '50%',
                     transform: 'translateX(-50%)',
                     width: '90%',
@@ -162,7 +197,7 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
                 });
             }
         } else {
-            // Si no encuentra elemento o es paso 0, CENTRAR
+            // Centrado si no hay target (Paso 1)
             setTargetRect(null);
             setTooltipStyle({
                 top: '50%',
@@ -176,7 +211,6 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
 
     useLayoutEffect(() => {
         if (isOpen) {
-            // Pequeño delay para asegurar que el DOM está listo
             const timer = setTimeout(updatePosition, 100);
             window.addEventListener('resize', updatePosition);
             return () => {
@@ -195,7 +229,6 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
 
     return (
         <div className="fixed inset-0 z-[100] overflow-hidden">
-            {/* Fondo con agujero (Spotlight) */}
             <motion.div 
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
@@ -208,7 +241,6 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
                 }}
             />
 
-            {/* Anillo pulsante */}
             {targetRect && (
                 <motion.div
                     layoutId="tour-ring"
@@ -218,19 +250,18 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
                         left: targetRect.left - 4,
                         width: targetRect.width + 8,
                         height: targetRect.height + 8,
-                        borderRadius: steps[step].targetId?.includes('menu') ? '0px' : '12px' // Sidebar cuadrado
+                        borderRadius: steps[step].targetId?.includes('nav') ? '12px' : '12px'
                     }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 />
             )}
 
-            {/* Tarjeta de Información */}
             <motion.div 
                 key={step}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="absolute bg-white p-6 rounded-3xl shadow-2xl"
+                className="absolute bg-white p-6 rounded-3xl shadow-2xl z-[101]"
                 style={tooltipStyle}
             >
                 <div className="flex justify-between items-start mb-4">
@@ -256,7 +287,7 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
     );
 };
 
-// --- COMPONENTE: TARJETA DE PEDIDO (SIN CAMBIOS) ---
+// --- COMPONENTE: TARJETA DE PEDIDO ---
 const OrderCard = ({ order }: { order: Pedido }) => {
   const [expanded, setExpanded] = useState(false);
   const statusColors = { pendiente: 'bg-yellow-50 text-yellow-700 border-yellow-200', pagado: 'bg-purple-50 text-purple-700 border-purple-200', atendido: 'bg-green-50 text-green-700 border-green-200', cancelado: 'bg-red-50 text-red-700 border-red-200' };
@@ -344,24 +375,33 @@ export default function ClientCatalog() {
   const [filteredProducts, setFilteredProducts] = useState<Producto[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [myOrders, setMyOrders] = useState<Pedido[]>([]);
+  const [favorites, setFavorites] = useState<number[]>([]);
+  const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
+
   const [userId, setUserId] = useState<string | null>(null);
   const [userData, setUserData] = useState<{nombre: string, telefono: string, avatar_url?: string} | null>(null);
   
-  // UI States (Navegación)
-  const [currentView, setCurrentView] = useState<'store' | 'orders' | 'profile' | 'support' | 'settings' | 'about'>('store');
+  // Paginación
+  const ITEMS_PER_PAGE = 25;
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // UI States
+  const [currentView, setCurrentView] = useState<'store' | 'favorites' | 'orders' | 'profile' | 'support' | 'settings' | 'about'>('store');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  // UI States (Modales y Tour)
   const [loading, setLoading] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
+
   const [orderSuccessId, setOrderSuccessId] = useState<number | null>(null);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error' | 'offer'} | null>(null);
-  const [showTour, setShowTour] = useState(false); // Estado para el Tour
+  const [showTour, setShowTour] = useState(false);
 
   // Estados Geolocalización
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [showSaveAddress, setShowSaveAddress] = useState(false);
+  const [newAddressAlias, setNewAddressAlias] = useState('');
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -414,29 +454,31 @@ export default function ClientCatalog() {
       setEditName(meta.full_name || '');
       setEditPhone(meta.phone || '');
 
-      fetchMyOrders(user.id);
+      Promise.all([
+          fetchMyOrders(user.id),
+          fetchFavorites(user.id),
+          fetchAddresses(user.id),
+          fetchProducts()
+      ]);
       
-      // VERIFICAR TOUR
       const hasSeenTour = localStorage.getItem('hasSeenTour');
-      if (!hasSeenTour) {
-          setTimeout(() => setShowTour(true), 1500); // Iniciar tour automáticamente si es nuevo
-      }
+      if (!hasSeenTour) setTimeout(() => setShowTour(true), 1500); 
       
       supabase.channel('mis-pedidos-realtime').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `user_id=eq.${user.id}` }, (payload) => {
            const newOrder = payload.new as Pedido;
            setMyOrders((prev) => prev.map((order) => order.id === newOrder.id ? newOrder : order));
            showToast(`Pedido #${newOrder.id}: ${newOrder.estado.toUpperCase()}`, 'success');
       }).subscribe();
-      
-      await fetchProducts();
+
+      supabase.channel('productos-stock-realtime').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'productos' }, (payload) => {
+          const updatedProd = payload.new as Producto;
+          setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+      }).subscribe();
     };
     initData();
   }, [router]);
 
-  const closeTour = () => {
-      setShowTour(false);
-      localStorage.setItem('hasSeenTour', 'true');
-  };
+  const closeTour = () => { setShowTour(false); localStorage.setItem('hasSeenTour', 'true'); };
 
   const fetchProducts = async () => {
     const { data } = await supabase.from('productos').select('*').order('id', { ascending: false });
@@ -448,6 +490,66 @@ export default function ClientCatalog() {
     const { data } = await supabase.from('pedidos').select('*').eq('user_id', uid).order('created_at', { ascending: false });
     if (data) setMyOrders(data);
   };
+
+  const fetchFavorites = async (uid: string) => {
+      const { data } = await supabase.from('favoritos').select('producto_id').eq('user_id', uid);
+      if (data) setFavorites(data.map(f => f.producto_id));
+  };
+
+  const fetchAddresses = async (uid: string) => {
+      const { data } = await supabase.from('user_addresses').select('*').eq('user_id', uid);
+      if (data) setSavedAddresses(data);
+  };
+
+  // --- LOGIC ---
+  const toggleFavorite = async (prodId: number) => {
+      if (!userId) return;
+      const isFav = favorites.includes(prodId);
+      setFavorites(prev => isFav ? prev.filter(id => id !== prodId) : [...prev, prodId]);
+
+      if (isFav) {
+          await supabase.from('favoritos').delete().match({ user_id: userId, producto_id: prodId });
+          showToast("Eliminado de favoritos", 'error');
+      } else {
+          await supabase.from('favoritos').insert({ user_id: userId, producto_id: prodId }); 
+          showToast("Agregado a favoritos", 'success');
+      }
+  };
+
+  const addToCart = (product: Producto) => {
+    if (product.stock <= 0) return showToast("Producto agotado", 'error');
+    const currentInCart = cart.find(item => item.id === product.id)?.cantidad || 0;
+    if (currentInCart >= product.stock) return showToast(`Solo quedan ${product.stock} unidades`, 'error');
+
+    const active = isOfferActive(product);
+    const finalPrice = (active && product.precio_oferta) ? product.precio_oferta : product.precio;
+    
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id);
+      if (existing) return prev.map(item => item.id === product.id ? { ...item, cantidad: item.cantidad + 1, precioFinal: finalPrice } : item);
+      return [...prev, { ...product, cantidad: 1, precioFinal: finalPrice }];
+    });
+    showToast(`Agregaste ${product.nombre}`, 'success');
+  };
+
+  const updateQuantity = (id: number, delta: number) => {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+
+    setCart(prev => prev.map(item => {
+        if (item.id === id) {
+            const newQty = item.cantidad + delta;
+            if (newQty > product.stock) {
+                showToast(`Solo quedan ${product.stock} unidades`, 'error');
+                return item;
+            }
+            return newQty > 0 ? { ...item, cantidad: newQty } : item;
+        }
+        return item;
+    }));
+  };
+
+  const removeFromCart = (id: number) => setCart(prev => prev.filter(item => item.id !== id));
 
   // --- PROFILE LOGIC ---
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -506,6 +608,7 @@ export default function ClientCatalog() {
     if (selectedCategory !== 'Todos') result = result.filter(p => p.categoria === selectedCategory);
     if (searchTerm) result = result.filter(p => p.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
     setFilteredProducts(result);
+    setCurrentPage(1); 
   }, [searchTerm, selectedCategory, products]);
 
   const fetchAddressFromCoords = async (lat: number, lng: number) => {
@@ -531,21 +634,6 @@ export default function ClientCatalog() {
     );
   };
 
-  // --- CARRITO ---
-  const addToCart = (product: Producto) => {
-    const active = isOfferActive(product);
-    const finalPrice = (active && product.precio_oferta) ? product.precio_oferta : product.precio;
-    setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
-      if (existing) return prev.map(item => item.id === product.id ? { ...item, cantidad: item.cantidad + 1, precioFinal: finalPrice } : item);
-      return [...prev, { ...product, cantidad: 1, precioFinal: finalPrice }];
-    });
-    showToast(`Agregaste ${product.nombre}`, 'success');
-  };
-  const removeFromCart = (id: number) => setCart(prev => prev.filter(item => item.id !== id));
-  const updateQuantity = (id: number, delta: number) => {
-    setCart(prev => prev.map(item => item.id === id ? (item.cantidad + delta > 0 ? { ...item, cantidad: item.cantidad + delta } : item) : item));
-  };
   const totalCartPrice = cart.reduce((acc, item) => acc + (item.precioFinal * item.cantidad), 0);
   const categories = ['Todos', ...Array.from(new Set(products.map(p => p.categoria)))];
 
@@ -556,6 +644,16 @@ export default function ClientCatalog() {
 
     try {
       setLoading(true);
+      
+      if (deliveryType === 'delivery' && showSaveAddress && newAddressAlias && userId) {
+          await supabase.from('user_addresses').insert({
+              user_id: userId,
+              alias: newAddressAlias,
+              direccion: address
+          });
+          fetchAddresses(userId);
+      }
+
       let uploadedUrl: string | null = null;
       if (paymentMethod === 'yape' && voucherFile) {
          const fileName = `${userId}/${Date.now()}_voucher.${voucherFile.name.split('.').pop()}`;
@@ -595,54 +693,116 @@ export default function ClientCatalog() {
     setVoucherFile(null);
   };
 
-  // --- RENDERIZADO DE VISTAS PRINCIPALES ---
+  // --- RENDER CONTENT ---
   const renderContent = () => {
-      switch (currentView) {
-          case 'store':
-              return (
-                  <>
-                      {/* Categorías (Con ID para el tour) */}
+      const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+      const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+      
+      const productsToShow = currentView === 'favorites' 
+          ? products.filter(p => favorites.includes(p.id)) 
+          : filteredProducts;
+
+      const currentProducts = productsToShow.slice(indexOfFirstItem, indexOfLastItem);
+      const totalPages = Math.ceil(productsToShow.length / ITEMS_PER_PAGE);
+
+      if (currentView === 'store' || currentView === 'favorites') {
+          return (
+              <>
+                  {currentView === 'store' && (
                       <div id="tour-categories" className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full mb-4 sticky top-[65px] z-20 bg-gray-50/95 backdrop-blur-sm py-2">
                         {categories.map((cat) => (
                           <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${selectedCategory === cat ? 'bg-gray-900 text-white border-gray-900 shadow-md transform scale-105' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{cat}</button>
                         ))}
                       </div>
+                  )}
 
-                      {/* Lista de Productos */}
-                      {loading ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-4"><Loader2 className="animate-spin text-orange-500 w-10 h-10"/><p className="text-gray-400 font-medium text-sm animate-pulse">Cargando bodega...</p></div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6 pb-20">
+                  {currentView === 'favorites' && productsToShow.length === 0 && (
+                      <div className="text-center py-20 opacity-50"><Heart className="w-20 h-20 mx-auto mb-4 text-gray-300"/> <p className="font-medium">No tienes favoritos aún</p></div>
+                  )}
+
+                  {loading ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-4"><Loader2 className="animate-spin text-orange-500 w-10 h-10"/><p className="text-gray-400 font-medium text-sm animate-pulse">Cargando bodega...</p></div>
+                  ) : (
+                    <>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6 pb-8">
                           <AnimatePresence mode='popLayout'>
-                            {filteredProducts.map((prod) => {
+                            {currentProducts.map((prod) => {
                               const activeOffer = isOfferActive(prod);
+                              const isFav = favorites.includes(prod.id);
+                              const outOfStock = prod.stock <= 0;
+
                               return (
-                              <motion.div key={prod.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ y: -5 }} className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-gray-100 hover:shadow-xl hover:border-orange-100 transition-all group relative flex flex-col justify-between h-full">
-                                <div className="aspect-square bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
+                              <motion.div key={prod.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ y: -5 }} className={`bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-gray-100 hover:shadow-xl hover:border-orange-100 transition-all group relative flex flex-col justify-between h-full ${outOfStock ? 'opacity-70 grayscale' : ''}`}>
+                                
+                                <div className="aspect-square bg-gray-100 rounded-xl mb-3 overflow-hidden relative cursor-pointer" onClick={() => setSelectedProduct(prod)}>
                                   <div className="absolute inset-0 flex items-center justify-center z-0"><ImageIcon className="text-gray-300 w-10 h-10" /></div>
-                                  {prod.imagen_url && <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-cover relative z-10 transition-opacity duration-300" onError={(e) => e.currentTarget.style.display = 'none'} />}
-                                  {prod.stock < 5 && <span className="absolute bottom-2 left-2 z-20 bg-red-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm">¡Quedan {prod.stock}!</span>}
-                                  {activeOffer && (<div className="absolute top-2 left-2 z-20 bg-orange-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-sm flex items-center gap-1 animate-pulse"><Zap className="w-3 h-3 fill-white"/> OFERTA</div>)}
+                                  {prod.imagen_url && <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-cover relative z-10 transition-transform duration-500 group-hover:scale-110" onError={(e) => e.currentTarget.style.display = 'none'} />}
+                                  
+                                  {outOfStock && (
+                                      <div className="absolute inset-0 z-30 bg-black/50 flex items-center justify-center backdrop-blur-[2px]">
+                                          <span className="bg-red-600 text-white font-black px-3 py-1 rounded-lg transform -rotate-12 border-2 border-white shadow-lg">AGOTADO</span>
+                                      </div>
+                                  )}
+
+                                  {!outOfStock && prod.stock < 5 && <span className="absolute bottom-2 left-2 z-20 bg-red-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm">¡Quedan {prod.stock}!</span>}
+                                  {activeOffer && !outOfStock && (<div className="absolute top-2 left-2 z-20 bg-orange-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-sm flex items-center gap-1 animate-pulse"><Zap className="w-3 h-3 fill-white"/> OFERTA</div>)}
+                                  
+                                  <button onClick={(e) => {e.stopPropagation(); toggleFavorite(prod.id)}} className="absolute top-2 right-2 z-30 p-1.5 rounded-full bg-white/80 hover:bg-white shadow-sm transition-transform active:scale-90">
+                                      <Heart className={`w-4 h-4 ${isFav ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} />
+                                  </button>
                                 </div>
+
                                 <div>
-                                  <h3 className="font-bold text-gray-800 text-sm sm:text-base leading-tight mb-1 line-clamp-2">{prod.nombre}</h3>
+                                  <h3 onClick={() => setSelectedProduct(prod)} className="font-bold text-gray-800 text-sm sm:text-base leading-tight mb-1 line-clamp-2 cursor-pointer hover:text-orange-600 transition-colors">{prod.nombre}</h3>
                                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">{prod.categoria}</p>
                                   <div className="flex items-end justify-between mt-auto">
                                     <div>
                                       {activeOffer && prod.precio_oferta ? (
-                                          <div className="flex flex-col"><span className="text-xs text-gray-400 line-through decoration-red-400 decoration-2">S/ {prod.precio.toFixed(2)}</span><span className="text-xl font-black text-orange-600">S/ {prod.precio_oferta.toFixed(2)}</span></div>
+                                        <div className="flex flex-col"><span className="text-xs text-gray-400 line-through decoration-red-400 decoration-2">S/ {prod.precio.toFixed(2)}</span><span className="text-xl font-black text-orange-600">S/ {prod.precio_oferta.toFixed(2)}</span></div>
                                       ) : (<span className="text-lg font-extrabold text-gray-900">S/ {prod.precio.toFixed(2)}</span>)}
                                     </div>
-                                    <motion.button whileTap={{ scale: 0.8 }} onClick={() => addToCart(prod)} className="bg-gray-900 text-white p-2.5 rounded-xl shadow-lg hover:bg-orange-600 transition-colors"><Plus className="w-5 h-5" /></motion.button>
+                                    <motion.button 
+                                        whileTap={{ scale: 0.8 }} 
+                                        disabled={outOfStock}
+                                        onClick={() => addToCart(prod)} 
+                                        className={`p-2.5 rounded-xl shadow-lg transition-colors ${outOfStock ? 'bg-gray-200 cursor-not-allowed text-gray-400' : 'bg-gray-900 text-white hover:bg-orange-600'}`}
+                                    >
+                                        {outOfStock ? <X className="w-5 h-5"/> : <Plus className="w-5 h-5" />}
+                                    </motion.button>
                                   </div>
                                 </div>
                               </motion.div>
                             )})}
                           </AnimatePresence>
                         </div>
-                      )}
-                  </>
-              );
+
+                        {productsToShow.length > ITEMS_PER_PAGE && (
+                            <div className="flex justify-center items-center gap-4 pb-24">
+                                <button 
+                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronLeft className="w-5 h-5 text-gray-600"/>
+                                </button>
+                                <span className="text-sm font-bold text-gray-600">
+                                    Página {currentPage} de {totalPages}
+                                </span>
+                                <button 
+                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronRight className="w-5 h-5 text-gray-600"/>
+                                </button>
+                            </div>
+                        )}
+                    </>
+                  )}
+              </>
+          );
+      }
+      switch (currentView) {
           case 'orders':
               return (
                   <div className="max-w-2xl mx-auto pb-20">
@@ -655,66 +815,63 @@ export default function ClientCatalog() {
           case 'profile':
               return (
                   <div className="max-w-lg mx-auto pb-20">
-                       <h2 className="text-2xl font-black mb-6 flex items-center gap-2"><User className="w-7 h-7 text-blue-500"/> Mi Perfil</h2>
-                       
-                       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                           <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 relative"></div>
-                           <div className="px-6 pb-6 relative">
-                               <div className="w-24 h-24 rounded-full bg-white p-1 absolute -top-12 left-1/2 -translate-x-1/2 shadow-lg group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
-                                   <div className="w-full h-full rounded-full bg-gray-200 overflow-hidden relative">
-                                        {avatarUploading ? (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Loader2 className="w-6 h-6 text-white animate-spin"/></div>
-                                        ) : userData?.avatar_url ? (
-                                            <img src={userData.avatar_url} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400">{userData?.nombre.charAt(0)}</div>
-                                        )}
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                            <Camera className="w-6 h-6 text-white"/>
-                                        </div>
-                                   </div>
-                                   <input type="file" ref={avatarInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
-                               </div>
-
-                               <div className="mt-14 text-center">
-                                   <h3 className="text-xl font-bold text-gray-900">{userData?.nombre}</h3>
-                                   <p className="text-sm text-gray-500">{userData?.telefono || 'Sin teléfono'}</p>
-                               </div>
-
-                               <div className="mt-8 space-y-4">
-                                   {isEditingProfile ? (
-                                       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                                           <div>
-                                               <label className="text-xs font-bold text-gray-400 uppercase">Nombre</label>
-                                               <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full border rounded-xl p-3 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        <h2 className="text-2xl font-black mb-6 flex items-center gap-2"><User className="w-7 h-7 text-blue-500"/> Mi Perfil</h2>
+                        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 relative"></div>
+                            <div className="px-6 pb-6 relative">
+                                <div className="w-24 h-24 rounded-full bg-white p-1 absolute -top-12 left-1/2 -translate-x-1/2 shadow-lg group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
+                                    <div className="w-full h-full rounded-full bg-gray-200 overflow-hidden relative">
+                                             {avatarUploading ? (
+                                                 <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Loader2 className="w-6 h-6 text-white animate-spin"/></div>
+                                             ) : userData?.avatar_url ? (
+                                                 <img src={userData.avatar_url} className="w-full h-full object-cover" />
+                                             ) : (
+                                                 <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400">{userData?.nombre.charAt(0)}</div>
+                                             )}
+                                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                                 <Camera className="w-6 h-6 text-white"/>
+                                             </div>
+                                    </div>
+                                    <input type="file" ref={avatarInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
+                                </div>
+                                <div className="mt-14 text-center">
+                                    <h3 className="text-xl font-bold text-gray-900">{userData?.nombre}</h3>
+                                    <p className="text-sm text-gray-500">{userData?.telefono || 'Sin teléfono'}</p>
+                                </div>
+                                <div className="mt-8 space-y-4">
+                                    {isEditingProfile ? (
+                                           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                                                <div>
+                                                    <label className="text-xs font-bold text-gray-400 uppercase">Nombre</label>
+                                                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full border rounded-xl p-3 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-bold text-gray-400 uppercase">Celular</label>
+                                                    <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full border rounded-xl p-3 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                                                </div>
+                                                <div className="flex gap-2 pt-2">
+                                                    <button onClick={() => setIsEditingProfile(false)} className="flex-1 py-3 rounded-xl bg-gray-100 font-bold text-gray-600 hover:bg-gray-200">Cancelar</button>
+                                                    <button onClick={handleSaveProfile} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Guardar Cambios</button>
+                                                </div>
                                            </div>
-                                           <div>
-                                               <label className="text-xs font-bold text-gray-400 uppercase">Celular</label>
-                                               <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full border rounded-xl p-3 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                                           </div>
-                                           <div className="flex gap-2 pt-2">
-                                               <button onClick={() => setIsEditingProfile(false)} className="flex-1 py-3 rounded-xl bg-gray-100 font-bold text-gray-600 hover:bg-gray-200">Cancelar</button>
-                                               <button onClick={handleSaveProfile} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Guardar Cambios</button>
-                                           </div>
-                                       </div>
-                                   ) : (
-                                       <>
-                                           <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-4">
-                                               <div className="p-2 bg-white rounded-lg shadow-sm"><User className="w-5 h-5 text-gray-400"/></div>
-                                               <div><p className="text-xs text-gray-400 font-bold uppercase">Nombre</p><p className="font-medium text-gray-900">{userData?.nombre}</p></div>
-                                           </div>
-                                           <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-4">
-                                               <div className="p-2 bg-white rounded-lg shadow-sm"><Smartphone className="w-5 h-5 text-gray-400"/></div>
-                                               <div><p className="text-xs text-gray-400 font-bold uppercase">Celular</p><p className="font-medium text-gray-900">{userData?.telefono || 'No registrado'}</p></div>
-                                           </div>
-                                           <button onClick={() => setIsEditingProfile(true)} className="w-full py-3 mt-2 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 flex items-center justify-center gap-2">
-                                               <Edit2 className="w-4 h-4"/> Editar Información
-                                           </button>
-                                       </>
-                                   )}
-                               </div>
-                           </div>
-                       </div>
+                                    ) : (
+                                           <>
+                                                <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-4">
+                                                    <div className="p-2 bg-white rounded-lg shadow-sm"><User className="w-5 h-5 text-gray-400"/></div>
+                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Nombre</p><p className="font-medium text-gray-900">{userData?.nombre}</p></div>
+                                                </div>
+                                                <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-4">
+                                                    <div className="p-2 bg-white rounded-lg shadow-sm"><Smartphone className="w-5 h-5 text-gray-400"/></div>
+                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Celular</p><p className="font-medium text-gray-900">{userData?.telefono || 'No registrado'}</p></div>
+                                                </div>
+                                                <button onClick={() => setIsEditingProfile(true)} className="w-full py-3 mt-2 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 flex items-center justify-center gap-2">
+                                                    <Edit2 className="w-4 h-4"/> Editar Información
+                                                </button>
+                                           </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                   </div>
               );
           case 'support':
@@ -730,13 +887,6 @@ export default function ClientCatalog() {
                                 <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=Hola,%20tengo%20una%20consulta`, '_blank')} className="flex-1 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 flex items-center justify-center gap-2"><MessageCircle className="w-5 h-5"/> WhatsApp</button>
                                 <button onClick={() => window.open('tel:961241085')} className="flex-1 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 flex items-center justify-center gap-2"><Smartphone className="w-5 h-5"/> Llamar</button>
                             </div>
-                        </div>
-                        <div className="bg-blue-50 p-4 rounded-xl flex items-center justify-between">
-                            <div>
-                                <h4 className="font-bold text-blue-900">¿Cómo funciona la App?</h4>
-                                <p className="text-xs text-blue-700">Ver el tutorial de bienvenida</p>
-                            </div>
-                            <button onClick={() => setShowTour(true)} className="bg-white text-blue-600 p-2 rounded-lg shadow-sm hover:scale-105 transition"><PlayCircle className="w-6 h-6"/></button>
                         </div>
                         <div>
                             <h3 className="font-bold text-gray-900 mb-3 ml-1">Preguntas Frecuentes</h3>
@@ -798,6 +948,47 @@ export default function ClientCatalog() {
       {isMapOpen && <LocationMap onConfirm={(lat, lng) => { setIsMapOpen(false); fetchAddressFromCoords(lat, lng); }} onCancel={() => setIsMapOpen(false)} />}
       <AnimatePresence>{toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
 
+      {/* MODAL DETALLE PRODUCTO */}
+      <AnimatePresence>
+          {selectedProduct && (
+              <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProduct(null)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-lg overflow-hidden relative z-10 shadow-2xl">
+                      <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-white/50 backdrop-blur-md p-2 rounded-full z-20 hover:bg-white"><X className="w-6 h-6"/></button>
+                      <div className="h-64 sm:h-80 bg-gray-100 relative">
+                          {selectedProduct.imagen_url ? <img src={selectedProduct.imagen_url} className="w-full h-full object-cover"/> : <div className="flex items-center justify-center h-full"><ImageIcon className="w-16 h-16 text-gray-300"/></div>}
+                          {isOfferActive(selectedProduct) && <div className="absolute bottom-4 left-4 bg-orange-600 text-white font-bold px-3 py-1 rounded-lg shadow-lg flex items-center gap-1"><Zap className="w-4 h-4 fill-white"/> OFERTA</div>}
+                      </div>
+                      <div className="p-6">
+                          <div className="flex justify-between items-start mb-2">
+                              <div>
+                                  <p className="text-xs font-bold text-gray-400 uppercase mb-1">{selectedProduct.categoria}</p>
+                                  <h2 className="text-2xl font-black text-gray-900 leading-tight">{selectedProduct.nombre}</h2>
+                              </div>
+                              <div className="text-right">
+                                  {isOfferActive(selectedProduct) && selectedProduct.precio_oferta ? (
+                                      <><p className="text-sm text-gray-400 line-through">S/ {selectedProduct.precio.toFixed(2)}</p><p className="text-2xl font-black text-orange-600">S/ {selectedProduct.precio_oferta.toFixed(2)}</p></>
+                                  ) : <p className="text-2xl font-black text-gray-900">S/ {selectedProduct.precio.toFixed(2)}</p>}
+                              </div>
+                          </div>
+                          <div className="flex items-center gap-2 mb-6">
+                              <div className={`px-3 py-1 rounded-full text-xs font-bold ${selectedProduct.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  {selectedProduct.stock > 0 ? `Stock: ${selectedProduct.stock} unid.` : 'Agotado'}
+                              </div>
+                          </div>
+                          <button 
+                            onClick={() => { addToCart(selectedProduct); setSelectedProduct(null); }} 
+                            disabled={selectedProduct.stock <= 0}
+                            className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 ${selectedProduct.stock > 0 ? 'bg-gray-900 text-white hover:bg-orange-600 shadow-xl shadow-orange-100' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                          >
+                              {selectedProduct.stock > 0 ? <><ShoppingCart className="w-5 h-5"/> Agregar al Carrito</> : 'Sin Stock'}
+                          </button>
+                      </div>
+                  </motion.div>
+              </div>
+          )}
+      </AnimatePresence>
+
       {/* --- SIDEBAR DE NAVEGACIÓN (Desktop & Mobile Drawer) --- */}
       <AnimatePresence>
           {isMenuOpen && (
@@ -817,12 +1008,14 @@ export default function ClientCatalog() {
                         </div>
                     </div>
                     <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                        <button onClick={() => { setCurrentView('store'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'store' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Store className="w-5 h-5"/> Tienda</button>
-                        <button onClick={() => { setCurrentView('orders'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Clock className="w-5 h-5"/> Mis Pedidos</button>
-                        <button onClick={() => { setCurrentView('profile'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'profile' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><User className="w-5 h-5"/> Mi Perfil</button>
+                        <button id="nav-store-mobile" onClick={() => { setCurrentView('store'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'store' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Store className="w-5 h-5"/> Tienda</button>
+                        <button id="nav-favorites-mobile" onClick={() => { setCurrentView('favorites'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'favorites' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Heart className="w-5 h-5"/> Favoritos</button>
+                        <button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Clock className="w-5 h-5"/> Mis Pedidos</button>
+                        <button id="nav-profile-mobile" onClick={() => { setCurrentView('profile'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'profile' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><User className="w-5 h-5"/> Mi Perfil</button>
                         <div className="my-4 border-t border-gray-100"></div>
-                        <button onClick={() => { setCurrentView('settings'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'settings' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Settings className="w-5 h-5"/> Configuración</button>
-                        <button onClick={() => { setCurrentView('support'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'support' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><HelpCircle className="w-5 h-5"/> Ayuda</button>
+                        <button id="nav-settings-mobile" onClick={() => { setCurrentView('settings'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'settings' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Settings className="w-5 h-5"/> Configuración</button>
+                        <button id="nav-support-mobile" onClick={() => { setCurrentView('support'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'support' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><HelpCircle className="w-5 h-5"/> Ayuda</button>
+                        <button onClick={() => { setIsMenuOpen(false); setShowTour(true); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors text-gray-600 hover:bg-gray-50`}><PlayCircle className="w-5 h-5"/> Tutorial</button>
                         <button onClick={() => { setCurrentView('about'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'about' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Info className="w-5 h-5"/> Acerca de</button>
                     </nav>
                     <div className="p-4 border-t border-gray-100">
@@ -841,22 +1034,24 @@ export default function ClientCatalog() {
                  <span className="font-black text-xl tracking-tight">Jormard</span>
              </div>
              <nav className="flex-1 p-4 space-y-1">
-                 <button onClick={() => setCurrentView('store')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'store' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Store className="w-5 h-5"/> Tienda</button>
-                 <button onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Clock className="w-5 h-5"/> Pedidos</button>
-                 <button onClick={() => setCurrentView('profile')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'profile' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><User className="w-5 h-5"/> Perfil</button>
+                 <button id="nav-store" onClick={() => setCurrentView('store')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'store' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Store className="w-5 h-5"/> Tienda</button>
+                 <button id="nav-favorites" onClick={() => setCurrentView('favorites')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'favorites' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Heart className="w-5 h-5"/> Favoritos</button>
+                 <button id="nav-orders" onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Clock className="w-5 h-5"/> Pedidos</button>
+                 <button id="nav-profile" onClick={() => setCurrentView('profile')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'profile' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><User className="w-5 h-5"/> Perfil</button>
                  <div className="my-4 border-t border-gray-100"></div>
-                 <button onClick={() => setCurrentView('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'settings' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Settings className="w-5 h-5"/> Ajustes</button>
-                 <button onClick={() => setCurrentView('support')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'support' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><HelpCircle className="w-5 h-5"/> Soporte</button>
+                 <button id="nav-settings" onClick={() => setCurrentView('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'settings' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Settings className="w-5 h-5"/> Ajustes</button>
+                 <button id="nav-support" onClick={() => setCurrentView('support')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'support' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><HelpCircle className="w-5 h-5"/> Soporte</button>
+                 <button onClick={() => setShowTour(true)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors text-gray-500 hover:bg-gray-50`}><PlayCircle className="w-5 h-5"/> Tutorial</button>
              </nav>
              <div className="p-4 border-t border-gray-100">
                 <div className="flex items-center gap-3 mb-4 px-2">
-                     <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                         {userData?.avatar_url ? <img src={userData.avatar_url} className="w-full h-full object-cover"/> : <span className="font-bold text-gray-500">{userData?.nombre.charAt(0)}</span>}
-                     </div>
-                     <div className="flex-1 min-w-0">
-                         <p className="font-bold text-sm truncate">{userData?.nombre}</p>
-                         <p className="text-xs text-gray-400 truncate">Cliente</p>
-                     </div>
+                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                          {userData?.avatar_url ? <img src={userData.avatar_url} className="w-full h-full object-cover"/> : <span className="font-bold text-gray-500">{userData?.nombre.charAt(0)}</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">{userData?.nombre}</p>
+                          <p className="text-xs text-gray-400 truncate">Cliente</p>
+                      </div>
                 </div>
                 <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gray-50 text-gray-600 font-bold hover:bg-gray-100 text-sm"><LogOut className="w-4 h-4"/> Salir</button>
              </div>
@@ -877,7 +1072,7 @@ export default function ClientCatalog() {
 
               {/* HEADER DESKTOP (SEARCH) */}
               <div className="hidden lg:flex sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-8 py-4 justify-between items-center">
-                   <h2 className="text-2xl font-black text-gray-900">{currentView === 'store' ? 'Tienda' : currentView === 'orders' ? 'Historial de Pedidos' : currentView === 'profile' ? 'Mi Perfil' : currentView === 'support' ? 'Ayuda' : 'Configuración'}</h2>
+                   <h2 className="text-2xl font-black text-gray-900">{currentView === 'store' ? 'Tienda' : currentView === 'orders' ? 'Historial de Pedidos' : currentView === 'profile' ? 'Mi Perfil' : currentView === 'support' ? 'Ayuda' : currentView === 'favorites' ? 'Mis Favoritos' : 'Configuración'}</h2>
                    <div className="flex items-center gap-4">
                        {currentView === 'store' && (
                            <div id="tour-search" className="relative group w-80">
@@ -952,7 +1147,7 @@ export default function ClientCatalog() {
         )}
       </AnimatePresence>
 
-      {/* --- CHECKOUT MODAL (Reutilizado pero mejorado) --- */}
+      {/* --- CHECKOUT MODAL MEJORADO (Direcciones) --- */}
       <AnimatePresence>
         {isCheckoutOpen && (
           <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4">
@@ -970,17 +1165,46 @@ export default function ClientCatalog() {
                   </div>
 
                   {deliveryType === 'delivery' && (
-                      <div className="mb-6 space-y-2">
+                      <div className="mb-6 space-y-4">
+                        {/* DIRECCIONES GUARDADAS */}
+                        {savedAddresses.length > 0 && (
+                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                {savedAddresses.map(addr => (
+                                    <button 
+                                        key={addr.id} 
+                                        onClick={() => setAddress(addr.direccion)}
+                                        className={`px-4 py-2 rounded-lg border text-xs font-bold whitespace-nowrap flex items-center gap-2 transition-all ${address === addr.direccion ? 'bg-orange-50 border-orange-500 text-orange-700 ring-2 ring-orange-200' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                                    >
+                                        <Home className="w-3 h-3"/> {addr.alias}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         <div className="relative group">
                            <input type="text" placeholder=" " value={address} onChange={e => setAddress(e.target.value)} className={`peer w-full bg-gray-50 border border-gray-200 rounded-xl p-4 pt-5 pl-11 outline-none focus:border-orange-500 transition-all font-medium ${gpsLoading ? 'opacity-50' : ''}`} disabled={gpsLoading}/>
                            <label className="absolute left-11 top-4 text-gray-400 text-xs font-bold uppercase transition-all peer-placeholder-shown:top-5 peer-placeholder-shown:text-base peer-focus:top-2 peer-focus:text-[10px] peer-focus:text-orange-500">Dirección de Entrega</label>
                            <MapPin className="absolute left-4 top-5 w-5 h-5 text-gray-400"/>
                            {gpsLoading && <Loader2 className="absolute right-4 top-5 w-5 h-5 animate-spin text-orange-500"/>}
                         </div>
+                        
                         <div className="flex gap-2">
-                            <button onClick={handleUseCurrentLocation} className="flex-1 py-2 bg-orange-50 text-orange-700 font-bold rounded-lg text-xs hover:bg-orange-100 border border-orange-100 flex justify-center gap-1 items-center"><LocateFixed className="w-3 h-3" /> Usar GPS</button>
-                            <button onClick={() => setIsMapOpen(true)} className="flex-1 py-2 bg-gray-100 text-gray-700 font-bold rounded-lg text-xs hover:bg-gray-200 border border-gray-200 flex justify-center gap-1 items-center"><MapIcon className="w-3 h-3" /> Abrir Mapa</button>
+                            <button onClick={handleUseCurrentLocation} className="flex-1 py-2 bg-orange-50 text-orange-700 font-bold rounded-lg text-xs hover:bg-orange-100 border border-orange-100 flex justify-center gap-1 items-center"><LocateFixed className="w-3 h-3" /> GPS</button>
+                            <button onClick={() => setIsMapOpen(true)} className="flex-1 py-2 bg-gray-100 text-gray-700 font-bold rounded-lg text-xs hover:bg-gray-200 border border-gray-200 flex justify-center gap-1 items-center"><MapIcon className="w-3 h-3" /> Mapa</button>
                         </div>
+
+                        {/* GUARDAR DIRECCION */}
+                        {address && !savedAddresses.find(a => a.direccion === address) && (
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 animate-in fade-in slide-in-from-top-2">
+                                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer mb-2">
+                                    <input type="checkbox" checked={showSaveAddress} onChange={(e) => setShowSaveAddress(e.target.checked)} className="rounded text-orange-600 focus:ring-orange-500"/>
+                                    Guardar esta dirección
+                                </label>
+                                {showSaveAddress && (
+                                    <input type="text" placeholder="Ej: Casa, Trabajo..." value={newAddressAlias} onChange={e => setNewAddressAlias(e.target.value)} className="w-full border rounded-lg p-2 text-sm outline-none focus:border-orange-500"/>
+                                )}
+                            </div>
+                        )}
                       </div>
                   )}
 
