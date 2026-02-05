@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { Store, ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock, MailCheck, ExternalLink } from 'lucide-react';
+import { Store, ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock, MailCheck, ExternalLink, KeyRound, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
+// Tipos de vista para manejar la navegación interna
+type AuthView = 'login' | 'register' | 'forgot' | 'success_register' | 'success_reset';
+
 export default function LoginPage() {
-  // Estado para saber si está en modo Login o Registro
-  const [isRegister, setIsRegister] = useState(false);
-  // Estado para mostrar la pantalla de éxito tras registro
-  const [showSuccess, setShowSuccess] = useState(false);
+  // --- ESTADOS ---
+  const [view, setView] = useState<AuthView>('login'); // Controla qué pantalla se ve
   
   // Campos del formulario
   const [fullName, setFullName] = useState('');
@@ -19,11 +20,10 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
-  // Estado para ver/ocultar contraseña (Ojo)
+  // UI States
   const [passwordVisible, setPasswordVisible] = useState(false);
-  
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{msg: string, type: 'error' | 'success'} | null>(null);
   
   const router = useRouter();
 
@@ -32,325 +32,340 @@ export default function LoginPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // --- HANDLERS ---
+
+  // 1. INICIAR SESIÓN
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMsg(null);
+    setNotification(null);
 
     try {
-      if (isRegister) {
-        // --- LÓGICA DE REGISTRO INTELIGENTE ---
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${location.origin}/auth/callback`,
-            data: {
-              full_name: fullName,
-              phone: phone,
-            },
-          },
-        });
+      const { data: { user }, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) throw new Error("Correo o contraseña incorrectos.");
 
-        if (error) throw error;
-        
-        // --- AQUÍ ESTÁ EL TRUCO INTELIGENTE ---
-        if (data.session) {
-            // CASO A: Confirmación desactivada en Supabase.
-            // El usuario ya tiene sesión, lo mandamos directo a la tienda.
-            router.push('/cliente/catalogo');
+      if (user) {
+        // Verificar rol
+        const { data: perfil, error: profileError } = await supabase
+          .from('perfiles')
+          .select('rol')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError) {
+          router.push('/cliente/catalogo');
         } else {
-            // CASO B: Confirmación activada en Supabase.
-            // No hay sesión aún, mostramos la pantalla de "Revisa tu correo".
-            setShowSuccess(true); 
-            setFullName('');
-            setPhone('');
-            // No borramos el email para que recuerden cuál usaron
-        }
-
-      } else {
-        // --- LÓGICA DE LOGIN (Igual que antes) ---
-        const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({ 
-          email, 
-          password 
-        });
-        
-        if (authError) throw new Error("Correo o contraseña incorrectos.");
-
-        if (user) {
-          // Consultar rol en la tabla 'perfiles'
-          const { data: perfil, error: profileError } = await supabase
-            .from('perfiles')
-            .select('rol')
-            .eq('id', user.id)
-            .single();
-
-          if (profileError) {
-            // Si no tiene perfil aún (error raro), lo mandamos al catálogo por defecto
-            router.push('/cliente/catalogo');
-            return;
-          }
-
-          // Redirección basada en rol
-          if (perfil?.rol === 'admin') {
-            router.push('/admin/dashboard');
-          } else {
-            router.push('/cliente/catalogo');
-          }
+          router.push(perfil?.rol === 'admin' ? '/admin/dashboard' : '/cliente/catalogo');
         }
       }
     } catch (error: any) {
-      setErrorMsg(error.message || "Ocurrió un error inesperado.");
+      setNotification({ msg: error.message, type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-orange-50 relative px-4 font-sans overflow-hidden">
-      
-      {/* --- FONDO DECORATIVO --- */}
-      <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-orange-200/40 rounded-full blur-[100px]" />
-      <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-red-200/40 rounded-full blur-[100px]" />
+  // 2. REGISTRO
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setNotification(null);
 
-      {/* --- BOTÓN REGRESAR AL INICIO --- */}
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${location.origin}/auth/callback`,
+          data: { full_name: fullName, phone: phone },
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data.session) {
+        router.push('/cliente/catalogo'); // Acceso directo si no requiere confirmación
+      } else {
+        setView('success_register'); // Mostrar pantalla de éxito
+      }
+    } catch (error: any) {
+      setNotification({ msg: error.message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 3. RECUPERAR CONTRASEÑA
+  const handleRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setNotification(null);
+
+    if (!email) {
+        setNotification({ msg: "Ingresa tu correo para recuperar.", type: 'error' });
+        setLoading(false);
+        return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/update-password`,
+      });
+
+      if (error) throw error;
+      
+      setView('success_reset'); 
+
+    } catch (error: any) {
+      setNotification({ msg: error.message || "Error al enviar el correo.", type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- RENDERIZADO ---
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#FFF7ED] relative px-4 font-sans overflow-hidden selection:bg-orange-200">
+      
+      {/* --- FONDO MODERNO --- */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute top-[-10%] right-[-5%] w-[800px] h-[800px] bg-gradient-to-br from-orange-300/30 to-red-300/30 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[600px] h-[600px] bg-gradient-to-tr from-yellow-200/40 to-orange-200/40 rounded-full blur-[100px]" />
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+      </div>
+
+      {/* --- BOTÓN REGRESAR --- */}
       <Link 
         href="/"
-        className="absolute top-6 left-6 z-20 flex items-center gap-2 bg-white/80 backdrop-blur-sm hover:bg-white text-orange-700 px-4 py-2 rounded-full shadow-sm transition-all hover:shadow-md font-medium text-sm group"
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 bg-white/60 backdrop-blur-md hover:bg-white text-gray-700 px-5 py-2.5 rounded-2xl shadow-sm transition-all hover:shadow-md font-bold text-sm group border border-white/50"
       >
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-        <span className="hidden sm:inline">Regresar al inicio</span>
-        <span className="sm:hidden">Inicio</span>
+        <span>Volver</span>
       </Link>
 
-      {/* --- TARJETA PRINCIPAL --- */}
+      {/* --- TARJETA PRINCIPAL (GLASSMORPHISM) --- */}
       <motion.div 
         layout
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white border border-orange-100 p-8 rounded-3xl shadow-xl w-full max-w-md z-10 relative overflow-hidden"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white/80 backdrop-blur-xl border border-white/60 p-8 sm:p-10 rounded-[2.5rem] shadow-2xl w-full max-w-[420px] z-10 relative overflow-hidden"
       >
         <AnimatePresence mode="wait">
-          {showSuccess ? (
-            // --- VISTA DE ÉXITO (Solo sale si la confirmación de email está activa) ---
-            <motion.div
-              key="success-view"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="text-center py-4"
-            >
-              <div className="flex justify-center mb-6">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-75"></div>
-                  <div className="relative bg-green-100 p-4 rounded-full">
-                    <MailCheck className="w-12 h-12 text-green-600" />
-                  </div>
-                </div>
-              </div>
-              
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Correo Enviado!</h2>
-              <p className="text-gray-500 mb-8 leading-relaxed">
-                Hemos enviado un enlace de confirmación a <span className="font-semibold text-gray-800">{email}</span>. 
-                <br />Por favor, revísalo para activar tu cuenta.
-              </p>
-
-              <div className="space-y-3">
-                <a 
-                  href="https://mail.google.com/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="w-full bg-red-50 text-red-600 hover:bg-red-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors border border-red-100"
-                >
-                  <Mail className="w-5 h-5" />
-                  Abrir Gmail
-                  <ExternalLink className="w-4 h-4 opacity-50" />
-                </a>
-
-                <button
-                  onClick={() => {
-                    setShowSuccess(false);
-                    setIsRegister(false); // Volver al login
-                    setEmail(''); 
-                  }}
-                  className="w-full bg-white text-gray-600 hover:bg-gray-50 font-semibold py-3.5 rounded-xl border border-gray-200 transition-colors"
-                >
-                  Volver al Inicio de Sesión
-                </button>
-              </div>
-            </motion.div>
-
-          ) : (
-            // --- VISTA FORMULARIO (LOGIN / REGISTRO) ---
-            <motion.div
-              key="form-view"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              {/* Encabezado */}
+          
+          {/* VISTA 1: LOGIN */}
+          {view === 'login' && (
+            <motion.div key="login" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{duration: 0.3}}>
               <div className="text-center mb-8">
-                <div className="inline-block p-3 bg-orange-100 rounded-2xl mb-4 text-orange-600">
+                <div className="inline-flex p-4 bg-gradient-to-br from-orange-500 to-red-600 rounded-3xl mb-5 shadow-lg shadow-orange-200 text-white transform rotate-3">
                   <Store className="w-8 h-8" />
                 </div>
-                <motion.h2 
-                  key={isRegister ? "reg-title" : "log-title"}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-3xl font-extrabold text-gray-900"
-                >
-                  {isRegister ? "Crear una Cuenta" : "¡Hola Vecino!"}
-                </motion.h2>
-                <motion.p 
-                   key={isRegister ? "reg-sub" : "log-sub"}
-                   initial={{ opacity: 0 }}
-                   animate={{ opacity: 1 }}
-                   className="text-gray-500 mt-2"
-                >
-                  {isRegister ? "Únete a Bodega Jormard" : "Ingresa para hacer tu pedido"}
-                </motion.p>
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight">¡Hola de nuevo!</h2>
+                <p className="text-gray-500 mt-2 font-medium">Ingresa a tu cuenta para pedir.</p>
               </div>
 
-              {/* Mensaje de Error */}
-              <AnimatePresence>
-                {errorMsg && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mb-6 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm"
-                  >
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    {errorMsg}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {notification && (
+                 <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 text-sm font-bold ${notification.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
+                    {notification.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
+                    {notification.msg}
+                 </div>
+              )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                
-                <AnimatePresence mode='popLayout'>
-                  {isRegister && (
-                    <>
-                      <motion.div 
-                        initial={{ opacity: 0, x: -20 }} 
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                      >
-                        <label className="text-sm font-semibold text-gray-700 ml-1">Nombre Completo</label>
-                        <div className="relative mt-1">
-                          <User className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-                          <input 
-                            type="text" 
-                            value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
-                            className="w-full bg-gray-50 text-gray-900 border border-gray-200 rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all placeholder-gray-400"
-                            placeholder="Ej. Juan Pérez"
-                            required={isRegister}
-                          />
-                        </div>
-                      </motion.div>
-
-                      <motion.div 
-                        initial={{ opacity: 0, x: -20 }} 
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ delay: 0.1 }}
-                      >
-                        <label className="text-sm font-semibold text-gray-700 ml-1">Teléfono</label>
-                        <div className="relative mt-1">
-                          <Phone className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-                          <input 
-                            type="tel" 
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            className="w-full bg-gray-50 text-gray-900 border border-gray-200 rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all placeholder-gray-400"
-                            placeholder="Ej. 999 999 999"
-                            required={isRegister}
-                          />
-                        </div>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-
+              <form onSubmit={handleLogin} className="space-y-5">
+                <InputGroup icon={<Mail/>} type="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={setEmail} label="Correo Electrónico" />
                 <div>
-                  <label className="text-sm font-semibold text-gray-700 ml-1">Correo Electrónico</label>
-                  <div className="relative mt-1">
-                    <Mail className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-                    <input 
-                      type="email" 
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-gray-50 text-gray-900 border border-gray-200 rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all placeholder-gray-400"
-                      placeholder="usuario@ejemplo.com"
-                      required
-                    />
-                  </div>
+                   <div className="relative">
+                      <InputGroup 
+                          icon={<Lock/>} 
+                          type={passwordVisible ? "text" : "password"} 
+                          placeholder="••••••••" 
+                          value={password} 
+                          onChange={setPassword} 
+                          label="Contraseña" 
+                      />
+                      {/* OJO ANIMADO */}
+                      <button 
+                        type="button"
+                        onClick={() => setPasswordVisible(!passwordVisible)}
+                        className="absolute right-4 top-[34px] text-gray-400 hover:text-orange-600 transition-colors focus:outline-none"
+                      >
+                          {passwordVisible ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                          ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                          )}
+                      </button>
+                   </div>
+                   <div className="flex justify-end mt-2">
+                       <button type="button" onClick={() => setView('forgot')} className="text-xs font-bold text-orange-600 hover:text-orange-700 hover:underline transition-colors">¿Olvidaste tu contraseña?</button>
+                   </div>
                 </div>
 
-                <div>
-                  <label className="text-sm font-semibold text-gray-700 ml-1">Contraseña</label>
-                  <div className="relative mt-1">
-                    <Lock className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-                    <input 
-                      type={passwordVisible ? "text" : "password"} // Aquí usamos el estado del ojo
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-gray-50 text-gray-900 border border-gray-200 rounded-xl py-3 pl-10 pr-12 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all placeholder-gray-400"
-                      placeholder="••••••••"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setPasswordVisible(!passwordVisible)}
-                      className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      {/* Icono del ojo (ver/ocultar) */}
-                      {passwordVisible ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full mt-6 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-orange-200 flex items-center justify-center gap-2 hover:shadow-orange-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      {isRegister ? "Registrarse Gratis" : "Ingresar"}
-                      <ArrowRight className="w-5 h-5" />
-                    </>
-                  )}
-                </motion.button>
+                <SubmitButton loading={loading} text="Ingresar" />
               </form>
 
-              {/* Footer del Toggle */}
-              <div className="mt-6 text-center pt-6 border-t border-gray-100">
-                <p className="text-gray-500 text-sm">
-                  {isRegister ? "¿Ya tienes una cuenta?" : "¿Eres nuevo en el barrio?"}
-                </p>
-                <button 
-                  onClick={() => {
-                    setIsRegister(!isRegister);
-                    setErrorMsg(null);
-                  }}
-                  className="text-orange-600 font-bold text-sm hover:text-orange-700 transition-colors mt-1"
-                >
-                  {isRegister ? "Inicia Sesión aquí" : "Crea tu cuenta aquí"}
-                </button>
+              <div className="mt-8 text-center">
+                <p className="text-gray-500 text-sm font-medium">¿Aún no tienes cuenta?</p>
+                <button onClick={() => { setView('register'); setNotification(null); }} className="text-gray-900 font-black text-sm hover:text-orange-600 transition-colors mt-1">Regístrate Gratis</button>
               </div>
             </motion.div>
           )}
+
+          {/* VISTA 2: REGISTRO */}
+          {view === 'register' && (
+            <motion.div key="register" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{duration: 0.3}}>
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Crear Cuenta</h2>
+                <p className="text-gray-500 mt-2 font-medium">Únete a la familia Jormard.</p>
+              </div>
+
+              {notification && (
+                 <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm font-bold">
+                    <AlertCircle className="w-4 h-4" /> {notification.msg}
+                 </div>
+              )}
+
+              <form onSubmit={handleRegister} className="space-y-4">
+                <InputGroup icon={<User/>} type="text" placeholder="Juan Pérez" value={fullName} onChange={setFullName} label="Nombre Completo" />
+                <InputGroup icon={<Phone/>} type="tel" placeholder="999 999 999" value={phone} onChange={setPhone} label="Celular" />
+                <InputGroup icon={<Mail/>} type="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={setEmail} label="Correo" />
+                
+                {/* Password en Registro con Ojo */}
+                <div className="relative">
+                    <InputGroup 
+                        icon={<Lock/>} 
+                        type={passwordVisible ? "text" : "password"} 
+                        placeholder="Crea una contraseña" 
+                        value={password} 
+                        onChange={setPassword} 
+                        label="Contraseña" 
+                    />
+                    <button 
+                        type="button"
+                        onClick={() => setPasswordVisible(!passwordVisible)}
+                        className="absolute right-4 top-[34px] text-gray-400 hover:text-orange-600 transition-colors focus:outline-none"
+                    >
+                        {passwordVisible ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                        )}
+                    </button>
+                </div>
+
+                <SubmitButton loading={loading} text="Registrarme" />
+              </form>
+
+              <div className="mt-6 text-center">
+                <button onClick={() => { setView('login'); setNotification(null); }} className="text-gray-500 font-bold text-sm hover:text-gray-900 transition-colors">Volver al Login</button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* VISTA 3: RECUPERAR CONTRASEÑA */}
+          {view === 'forgot' && (
+            <motion.div key="forgot" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{duration: 0.3}}>
+               <div className="text-center mb-8">
+                <div className="inline-flex p-4 bg-blue-50 rounded-full mb-4 text-blue-600">
+                  <KeyRound className="w-8 h-8" />
+                </div>
+                <h2 className="text-2xl font-black text-gray-900">Recuperar Acceso</h2>
+                <p className="text-gray-500 mt-2 text-sm leading-relaxed">No te preocupes. Escribe tu correo y te enviaremos un enlace mágico para volver a entrar.</p>
+              </div>
+
+              {notification && (
+                 <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm font-bold">
+                    <AlertCircle className="w-4 h-4" /> {notification.msg}
+                 </div>
+              )}
+
+              <form onSubmit={handleRecover} className="space-y-6">
+                <InputGroup icon={<Mail/>} type="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={setEmail} label="Correo Electrónico" />
+                <SubmitButton loading={loading} text="Enviar Enlace de Recuperación" />
+              </form>
+
+              <div className="mt-8 text-center">
+                <button onClick={() => { setView('login'); setNotification(null); }} className="text-gray-500 font-bold text-sm hover:text-gray-900 transition-colors">Cancelar y volver</button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* VISTA 4: ÉXITO REGISTRO */}
+          {view === 'success_register' && (
+             <SuccessScreen 
+                title="¡Bienvenido!" 
+                desc={`Hemos enviado un correo a ${email}. Por favor confirma tu cuenta para continuar.`}
+                btnText="Volver al Login"
+                onBtnClick={() => setView('login')}
+             />
+          )}
+
+          {/* VISTA 5: ÉXITO RECUPERACIÓN */}
+          {view === 'success_reset' && (
+             <SuccessScreen 
+                title="¡Correo Enviado!" 
+                desc={`Revisa tu bandeja de entrada en ${email}. Te hemos enviado un enlace para restablecer tu contraseña.`}
+                btnText="Entendido, volver"
+                onBtnClick={() => setView('login')}
+             />
+          )}
+
         </AnimatePresence>
       </motion.div>
     </div>
   );
 }
+
+// --- SUBCOMPONENTES REUTILIZABLES ---
+
+// 1. Input Genérico con Estilo Moderno
+const InputGroup = ({ icon, type, placeholder, value, onChange, label }: any) => (
+    <div>
+        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide ml-1 mb-1.5 block">{label}</label>
+        <div className="relative group">
+            <div className="absolute left-3 top-3.5 text-gray-400 group-focus-within:text-orange-500 transition-colors">{icon}</div>
+            <input 
+                type={type} 
+                value={value} 
+                onChange={(e) => onChange(e.target.value)} 
+                className="w-full bg-gray-50/50 border border-gray-200 text-gray-900 rounded-xl py-3 pl-10 pr-12 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all font-medium placeholder-gray-400"
+                placeholder={placeholder}
+                required
+            />
+        </div>
+    </div>
+);
+
+// 2. Botón de Envío con Gradiente
+const SubmitButton = ({ loading, text }: { loading: boolean, text: string }) => (
+    <motion.button
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className="w-full bg-gray-900 hover:bg-black text-white font-bold py-4 rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+        disabled={loading}
+    >
+        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>{text} <ArrowRight className="w-5 h-5" /></>}
+    </motion.button>
+);
+
+// 3. Pantalla de Éxito Genérica
+const SuccessScreen = ({ title, desc, btnText, onBtnClick }: any) => (
+    <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
+        <div className="relative inline-block mb-6">
+            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-75"></div>
+            <div className="relative bg-green-100 p-5 rounded-full text-green-600"><MailCheck className="w-12 h-12" /></div>
+        </div>
+        <h2 className="text-2xl font-black text-gray-900 mb-2">{title}</h2>
+        <p className="text-gray-500 mb-8 leading-relaxed font-medium">{desc}</p>
+        
+        <div className="space-y-3">
+            <a href="https://mail.google.com/" target="_blank" className="w-full bg-red-50 text-red-600 hover:bg-red-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors border border-red-100">
+                <Mail className="w-5 h-5" /> Abrir Gmail <ExternalLink className="w-4 h-4 opacity-50" />
+            </a>
+            <button onClick={onBtnClick} className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold py-3.5 rounded-xl transition-colors">
+                {btnText}
+            </button>
+        </div>
+    </motion.div>
+);
