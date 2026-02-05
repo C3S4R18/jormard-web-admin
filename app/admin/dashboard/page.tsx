@@ -12,7 +12,7 @@ import {
   TrendingUp, Copy, Bell, LogOut, Volume2, Zap, Timer, Pencil, XCircle,
   Map, ExternalLink, HelpCircle, FileDown, ChevronRight, Flag, Image as ImageIcon, 
   Paperclip, Users, Settings, Package, ShoppingBag, ArrowRight, LayoutDashboard, Phone, Calendar,
-  Tags
+  Tags, Bot, MessageSquare, Sparkles, Trophy
 } from 'lucide-react';
 
 // --- IMPORTACIÓN DINÁMICA DEL MAPA ---
@@ -69,150 +69,353 @@ const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 
   <motion.div 
     initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.9 }}
     className={`fixed bottom-10 right-10 z-[100] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md border ${
-      type === 'success' ? 'bg-gray-900 text-white border-gray-700' : 'bg-red-600 text-white border-red-500'
+      type === 'success' ? 'bg-slate-900 text-white border-slate-700' : 'bg-red-600 text-white border-red-500'
     }`}
   >
-    {type === 'success' ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <X className="w-5 h-5" />}
-    <span className="font-bold text-sm">{message}</span>
+    {type === 'success' ? <CheckCircle2 className="w-6 h-6 text-green-400" /> : <X className="w-6 h-6" />}
+    <span className="font-bold text-base">{message}</span>
   </motion.div>
 );
 
 const StatCard = ({ title, value, icon, color, subtext }: { title: string, value: string, icon: any, color: string, subtext?: string }) => (
-  <motion.div whileHover={{ y: -5 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group transition-all relative overflow-hidden">
-    <div className={`absolute right-0 top-0 p-10 opacity-5 rounded-bl-full ${color.replace('text-', 'bg-')}`}></div>
+  <motion.div whileHover={{ y: -5 }} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-lg flex items-center justify-between group transition-all relative overflow-hidden">
+    <div className={`absolute right-0 top-0 p-12 opacity-5 rounded-bl-full ${color.replace('text-', 'bg-')}`}></div>
     <div className="relative z-10">
-      <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">{title}</p>
-      <h3 className="text-3xl font-black text-gray-900">{value}</h3>
-      {subtext && <p className={`text-xs font-bold mt-2 ${color} flex items-center gap-1`}>{subtext}</p>}
+      <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">{title}</p>
+      <h3 className="text-4xl font-black text-slate-900">{value}</h3>
+      {subtext && <p className={`text-sm font-bold mt-2 ${color} flex items-center gap-1`}>{subtext}</p>}
     </div>
-    <div className={`p-4 rounded-xl ${color.replace('text-', 'bg-').replace('600', '50')} ${color} relative z-10`}>
+    <div className={`p-4 rounded-2xl ${color.replace('text-', 'bg-').replace('600', '50')} ${color} relative z-10 shadow-sm`}>
       {icon}
     </div>
   </motion.div>
 );
 
-// --- TOUR GUIDE MEJORADO ---
-const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+// --- EFECTO CONFETI ---
+const Confetti = () => {
+    const colors = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
+    return (
+        <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
+            {[...Array(50)].map((_, i) => (
+                <motion.div
+                    key={i}
+                    initial={{ y: -20, x: Math.random() * 100 + 'vw', opacity: 1, rotate: 0 }}
+                    animate={{ y: '100vh', x: (Math.random() - 0.5) * 200 + 'px', opacity: 0, rotate: 360 }}
+                    transition={{ duration: Math.random() * 2 + 2, delay: Math.random() * 0.5, ease: 'linear' }}
+                    className="absolute w-3 h-3 rounded-sm"
+                    style={{ backgroundColor: colors[i % colors.length] }}
+                />
+            ))}
+        </div>
+    );
+};
+
+// --- CHATBOT JORMARD 2.0 ---
+interface Message {
+    id: number;
+    text: string | React.ReactNode;
+    sender: 'bot' | 'user';
+    timestamp: Date;
+}
+
+const InventoryBot = ({ products, orders }: { products: Producto[], orders: Pedido[] }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [isTyping, setIsTyping] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const lowStockItems = products.filter(p => p.stock < 10 && p.stock > 0);
+    const criticalStockItems = products.filter(p => p.stock === 0);
+    const pendingOrders = orders.filter(o => o.estado === 'pendiente');
+
+    useEffect(() => {
+        if (messages.length === 0) {
+            setMessages([{
+                id: 1,
+                text: "¡Hola Jefe! 👋 Soy tu asistente Jormard. ¿Qué deseas revisar hoy?",
+                sender: 'bot',
+                timestamp: new Date()
+            }]);
+        }
+    }, []);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isTyping]);
+
+    const handleAction = (action: 'stock' | 'orders' | 'summary') => {
+        const userMsg: Message = { id: Date.now(), text: action === 'stock' ? "Revisar Stock" : action === 'orders' ? "Ver Pedidos" : "Resumen del día", sender: 'user', timestamp: new Date() };
+        setMessages(prev => [...prev, userMsg]);
+        setIsTyping(true);
+
+        setTimeout(() => {
+            let botResponse: React.ReactNode;
+            if (action === 'stock') {
+                if (criticalStockItems.length === 0 && lowStockItems.length === 0) {
+                    botResponse = "✅ Todo excelente. No hay productos agotados ni con stock bajo.";
+                } else {
+                    botResponse = (
+                        <div className="space-y-2">
+                            <p>He encontrado algunos detalles en el almacén:</p>
+                            {criticalStockItems.length > 0 && (
+                                <div className="bg-red-50 p-2 rounded-lg border border-red-100 text-red-800 text-sm">
+                                    <strong>🚨 {criticalStockItems.length} Agotados:</strong>
+                                    <ul className="list-disc pl-4 mt-1">{criticalStockItems.slice(0, 3).map(p => <li key={p.id}>{p.nombre}</li>)}</ul>
+                                    {criticalStockItems.length > 3 && <span>...y otros.</span>}
+                                </div>
+                            )}
+                            {lowStockItems.length > 0 && (
+                                <div className="bg-orange-50 p-2 rounded-lg border border-orange-100 text-orange-800 text-sm">
+                                    <strong>⚠️ {lowStockItems.length} Por acabarse:</strong>
+                                    <ul className="list-disc pl-4 mt-1">{lowStockItems.slice(0, 3).map(p => <li key={p.id}>{p.nombre} ({p.stock})</li>)}</ul>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+            } else if (action === 'orders') {
+                if (pendingOrders.length === 0) {
+                    botResponse = "👍 No tienes pedidos pendientes. ¡Estamos al día!";
+                } else {
+                    botResponse = (
+                        <div>
+                            <p>Hay <b>{pendingOrders.length} pedidos</b> esperando atención.</p>
+                            <p className="text-xs text-gray-500 mt-1">Revisa la pestaña de pedidos para confirmarlos.</p>
+                        </div>
+                    );
+                }
+            } else {
+                const totalSales = orders.filter(o => o.estado === 'atendido').reduce((acc, curr) => acc + curr.total, 0);
+                botResponse = `💰 Hoy has vendido S/ ${totalSales.toFixed(2)}. Tienes ${products.length} productos activos en catálogo.`;
+            }
+
+            setMessages(prev => [...prev, { id: Date.now() + 1, text: botResponse, sender: 'bot', timestamp: new Date() }]);
+            setIsTyping(false);
+        }, 1000);
+    };
+
+    return (
+        <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end gap-4 font-sans">
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="bg-white border border-slate-200 rounded-3xl shadow-2xl w-80 sm:w-96 mb-2 overflow-hidden flex flex-col h-[500px]">
+                        <div className="bg-slate-900 p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="relative"><div className="bg-indigo-500 p-2 rounded-xl text-white"><Bot size={24} /></div><span className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 border-2 border-slate-900 rounded-full"></span></div>
+                                <div><h4 className="font-bold text-white text-base">Asistente Jormard</h4><p className="text-xs text-slate-400">IA de Inventario</p></div>
+                            </div>
+                            <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition"><X size={20}/></button>
+                        </div>
+                        <div className="flex-1 bg-slate-50 p-4 overflow-y-auto space-y-4">
+                            {messages.map((msg) => (
+                                <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white text-slate-700 border border-slate-200 rounded-bl-none'}`}>{msg.text}</div>
+                                </motion.div>
+                            ))}
+                            {isTyping && (<div className="flex justify-start"><div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-none flex gap-1 items-center"><span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span><span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100"></span><span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200"></span></div></div>)}
+                            <div ref={messagesEndRef} />
+                        </div>
+                        <div className="p-4 bg-white border-t border-slate-100">
+                            <p className="text-xs font-bold text-slate-400 uppercase mb-2">Acciones Rápidas</p>
+                            <div className="flex flex-wrap gap-2">
+                                <button onClick={() => handleAction('stock')} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1"><AlertTriangle size={12}/> Revisar Stock</button>
+                                <button onClick={() => handleAction('orders')} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1"><ShoppingBag size={12}/> Pedidos</button>
+                                <button onClick={() => handleAction('summary')} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1"><BarChart3 size={12}/> Resumen</button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsOpen(!isOpen)} className="bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-2xl shadow-indigo-300 flex items-center justify-center relative z-50 transition-colors">
+                {isOpen ? <X size={28} /> : <MessageSquare size={28} />}
+                {(lowStockItems.length > 0 || pendingOrders.length > 0) && (<span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white animate-pulse">!</span>)}
+            </motion.button>
+        </div>
+    );
+};
+
+// --- TOUR GUIDE MEJORADO (CON NAVEGACIÓN Y CONFETI) ---
+const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () => void, setView: (view: any) => void }) => {
     const [step, setStep] = useState(0);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
+    const [showConfetti, setShowConfetti] = useState(false);
 
+    // Definición de pasos con la vista requerida
     const steps = [
         { 
-            title: "Bienvenido al Panel Jefe", 
-            desc: "Este es el centro de control. Vamos a enseñarte a gestionar tu bodega como un profesional.",
-            targetId: null 
+            title: "👋 Bienvenido Jefe", 
+            desc: "Este es tu panel de control profesional. Vamos a dar un paseo rápido.",
+            targetId: null,
+            view: 'dashboard'
         },
         { 
             title: "1. Resumen (Dashboard)", 
-            desc: "Aquí verás tus ventas del día y alertas de stock.",
+            desc: "Aquí ves tus ventas del día, pedidos pendientes y alertas de stock de un vistazo.",
             targetId: 'nav-dashboard',
-            mobileId: 'nav-dashboard-mobile'
+            mobileId: 'nav-dashboard-mobile',
+            view: 'dashboard'
         },
         { 
-            title: "2. Gestión de Pedidos", 
-            desc: "Recibe y atiende los pedidos de tus clientes en tiempo real.",
+            title: "2. Pedidos", 
+            desc: "Aquí recibes las compras. ¡Vamos a ver la pantalla de pedidos!",
             targetId: 'nav-orders',
-            mobileId: 'nav-orders-mobile'
+            mobileId: 'nav-orders-mobile',
+            view: 'orders' // Cambia la vista automáticamente
+        },
+        {
+            title: "Lista de Pedidos",
+            desc: "Aquí aparecerán las tarjetas de pedidos. Podrás ver si pagaron con Yape o Efectivo.",
+            targetId: null, // General focus
+            view: 'orders'
         },
         { 
             title: "3. Inventario", 
-            desc: "Aquí es donde agregas y editas tus productos.",
+            desc: "Ahora vamos a la sección más importante: Tus Productos.",
             targetId: 'nav-inventory',
-            mobileId: 'nav-inventory-mobile'
-        },
-        // --- PASOS DETALLADOS DEL INVENTARIO ---
-        {
-            title: "Formulario de Producto",
-            desc: "En este panel izquierdo controlas los datos. Empieza escribiendo el nombre, precio y stock.",
-            targetId: 'tour-form-basic'
+            mobileId: 'nav-inventory-mobile',
+            view: 'inventory' // Cambia la vista automáticamente
         },
         {
-            title: "Ofertas Flash",
-            desc: "Activa esta casilla para crear promociones temporales. Se mostrarán destacadas en la App del cliente.",
-            targetId: 'tour-form-offer'
+            title: "Crear/Editar Producto",
+            desc: "Usa este formulario. Escribe el Nombre, Precio y Stock para agregar algo nuevo.",
+            targetId: 'tour-form-basic',
+            view: 'inventory'
         },
         {
-            title: "Imagen del Producto",
-            desc: "Sube una foto atractiva. Si no tienes una, se usará una imagen por defecto, pero te recomendamos subir una real.",
-            targetId: 'tour-form-image'
+            title: "¡Ofertas Flash!",
+            desc: "Activa 'Oferta Flash' para poner un precio rebajado con hora de inicio y fin. ¡Atrae clientes!",
+            targetId: 'tour-form-offer',
+            view: 'inventory'
         },
         {
-            title: "Carga Masiva (Excel)",
-            desc: "Si tienes cientos de productos, no los subas uno por uno. Descarga la plantilla, llénala y súbela aquí.",
-            targetId: 'tour-excel-actions'
+            title: "Foto del Producto",
+            desc: "Sube una imagen real aquí. Los productos con foto se venden un 50% más.",
+            targetId: 'tour-form-image',
+            view: 'inventory'
         },
-        // ---------------------------------------------
+        {
+            title: "Carga Masiva",
+            desc: "¿Tienes muchos productos? Usa Excel. Descarga la plantilla aquí y súbela llena.",
+            targetId: 'tour-excel-actions',
+            view: 'inventory'
+        },
         { 
-            title: "4. Base de Clientes", 
-            desc: "Visualiza quiénes son tus mejores compradores y su historial.",
+            title: "4. Clientes", 
+            desc: "Finalmente, aquí verás tu base de datos de clientes frecuentes.",
             targetId: 'nav-customers',
-            mobileId: 'nav-customers-mobile'
+            mobileId: 'nav-customers-mobile',
+            view: 'customers' // Cambia la vista automáticamente
+        },
+        {
+            title: "¡Todo Listo!",
+            desc: "Ya eres un experto. ¡A vender se ha dicho!",
+            targetId: null,
+            view: 'dashboard'
         }
     ];
 
+    // Efecto para cambiar de vista cuando cambia el paso
+    useEffect(() => {
+        const currentStepConfig = steps[step];
+        if (currentStepConfig.view) {
+            setView(currentStepConfig.view);
+        }
+    }, [step]);
+
+    // Calcular posición del tooltip
     const updatePosition = () => {
         const currentStep = steps[step];
-        let el = null;
-        if (currentStep.targetId) {
-            el = document.getElementById(currentStep.targetId);
-            if (el && window.getComputedStyle(el).display === 'none' && currentStep.mobileId) {
-                el = document.getElementById(currentStep.mobileId);
+        let el: HTMLElement | null = null; // TIPADO CORREGIDO AQUÍ
+        
+        // Esperar un poco a que la vista cambie y el DOM se renderice
+        setTimeout(() => {
+            if (currentStep.targetId) {
+                el = document.getElementById(currentStep.targetId);
+                // Si está oculto (mobile), buscar el ID móvil
+                if (el && window.getComputedStyle(el).display === 'none' && currentStep.mobileId) {
+                    el = document.getElementById(currentStep.mobileId);
+                }
             }
-        }
-        if (el) {
-            const rect = el.getBoundingClientRect();
-            setTargetRect(rect);
-            const isSidebar = rect.height > window.innerHeight * 0.8 || rect.left < 100; 
-            
-            if (isSidebar) {
-                setTooltipStyle({ top: `${rect.top}px`, left: `${rect.right + 20}px` });
+            // Fallback directo a mobileId si no hay targetId
+            if (!el && currentStep.mobileId) {
+                 el = document.getElementById(currentStep.mobileId);
+            }
+
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                setTargetRect(rect);
+                
+                const isSidebar = rect.height > window.innerHeight * 0.8 || rect.left < 100; 
+                
+                if (isSidebar) {
+                    setTooltipStyle({ top: `${rect.top + 20}px`, left: `${rect.right + 25}px` });
+                } else {
+                    const spaceBelow = window.innerHeight - rect.bottom;
+                    const showBelow = spaceBelow > 250;
+                    setTooltipStyle({
+                        top: showBelow ? `${rect.bottom + 20}px` : 'auto',
+                        bottom: !showBelow ? `${window.innerHeight - rect.top + 20}px` : 'auto',
+                        left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '380px'
+                    });
+                }
             } else {
-                const spaceBelow = window.innerHeight - rect.bottom;
-                const showBelow = spaceBelow > 250;
-                setTooltipStyle({
-                    top: showBelow ? `${rect.bottom + 20}px` : 'auto',
-                    bottom: !showBelow ? `${window.innerHeight - rect.top + 20}px` : 'auto',
-                    left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '350px'
-                });
+                setTargetRect(null);
+                setTooltipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: '420px' });
             }
-        } else {
-            setTargetRect(null);
-            setTooltipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: '400px' });
-        }
+        }, 300); // Delay para permitir renderizado de la nueva vista
     };
 
     useLayoutEffect(() => {
         if (isOpen) {
-            const timer = setTimeout(updatePosition, 100);
+            updatePosition();
             window.addEventListener('resize', updatePosition);
-            return () => { window.removeEventListener('resize', updatePosition); clearTimeout(timer); }
+            return () => window.removeEventListener('resize', updatePosition);
         }
     }, [step, isOpen]);
 
-    const handleNext = () => { if (step < steps.length - 1) setStep(step + 1); else onClose(); };
+    const handleNext = () => { 
+        if (step < steps.length - 1) {
+            setStep(step + 1); 
+        } else {
+            // FIN DEL TOUR
+            setShowConfetti(true);
+            setTimeout(() => {
+                onClose();
+                setShowConfetti(false);
+            }, 4000);
+        }
+    };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[120] overflow-hidden">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 transition-all duration-500 ease-in-out"
-                style={{ background: 'rgba(0,0,0,0.7)', clipPath: targetRect ? `polygon(0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%, ${targetRect.left}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.top}px)` : undefined }}
-            />
-            {targetRect && <motion.div layoutId="tour-ring" className="absolute border-2 border-orange-500 rounded-lg shadow-[0_0_20px_rgba(249,115,22,0.6)]" style={{ top: targetRect.top - 4, left: targetRect.left - 4, width: targetRect.width + 8, height: targetRect.height + 8 }} transition={{ type: "spring", stiffness: 300, damping: 30 }} />}
-            <motion.div key={step} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="absolute bg-white p-6 rounded-3xl shadow-2xl" style={tooltipStyle}>
-                <div className="flex justify-between items-start mb-4">
-                    <div className="bg-orange-100 p-2 rounded-full text-orange-600"><Flag size={24}/></div>
-                    <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-md">{step + 1} / {steps.length}</span>
-                </div>
-                <h3 className="text-xl font-black text-gray-900 mb-2">{steps[step].title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed mb-6">{steps[step].desc}</p>
-                <div className="flex justify-between items-center">
-                    <button onClick={onClose} className="text-gray-400 font-bold text-sm hover:text-gray-600">Omitir</button>
-                    <button onClick={handleNext} className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors shadow-lg shadow-orange-100 flex items-center gap-2">{step === steps.length - 1 ? '¡Listo!' : 'Siguiente'} <ArrowRight size={16}/></button>
-                </div>
-            </motion.div>
-        </div>
+        <>
+            {showConfetti && <Confetti />}
+            <div className="fixed inset-0 z-[120] overflow-hidden">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 transition-all duration-500 ease-in-out"
+                    style={{ background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', clipPath: targetRect ? `polygon(0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%, ${targetRect.left}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.top}px)` : undefined }}
+                />
+                {targetRect && <motion.div layoutId="tour-ring" className="absolute border-4 border-indigo-500 rounded-xl shadow-[0_0_30px_rgba(99,102,241,0.6)]" style={{ top: targetRect.top - 8, left: targetRect.left - 8, width: targetRect.width + 16, height: targetRect.height + 16 }} transition={{ type: "spring", stiffness: 300, damping: 30 }} />}
+                
+                <motion.div key={step} initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="absolute bg-white p-6 rounded-3xl shadow-2xl border border-slate-100" style={tooltipStyle}>
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="bg-indigo-100 p-2.5 rounded-2xl text-indigo-600">
+                             {step === steps.length - 1 ? <Trophy size={24} /> : <Flag size={24}/>}
+                        </div>
+                        <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{step + 1} / {steps.length}</span>
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">{steps[step].title}</h3>
+                    <p className="text-slate-500 text-base leading-relaxed mb-8">{steps[step].desc}</p>
+                    <div className="flex justify-between items-center">
+                        <button onClick={onClose} className="text-slate-400 font-bold text-sm hover:text-slate-600 transition">Omitir</button>
+                        <button onClick={handleNext} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2 transform active:scale-95">
+                            {step === steps.length - 1 ? '¡Finalizar!' : 'Siguiente'} <ArrowRight size={18}/>
+                        </button>
+                    </div>
+                </motion.div>
+            </div>
+        </>
     );
 };
 
@@ -274,7 +477,6 @@ export default function AdminDashboard() {
   // --- EFECTOS ---
   useEffect(() => {
     fetchData();
-    // Check Tour
     const hasSeenAdminTour = localStorage.getItem('hasSeenAdminTour');
     if (!hasSeenAdminTour) setTimeout(() => setShowGuide(true), 1500);
 
@@ -523,36 +725,42 @@ export default function AdminDashboard() {
           if (!groups[cat]) groups[cat] = [];
           groups[cat].push(p);
       });
-      return groups;
+      return Object.keys(groups).sort().reduce((obj, key) => { obj[key] = groups[key]; return obj; }, {} as Record<string, Producto[]>);
   };
   const groupedProducts = getGroupedProducts();
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex selection:bg-orange-200">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex selection:bg-indigo-200">
       
       <AnimatePresence>
         {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-        {showGuide && <TourGuide isOpen={showGuide} onClose={closeTour} />}
+        {showGuide && <TourGuide isOpen={showGuide} onClose={closeTour} setView={setCurrentView} />}
       </AnimatePresence>
+      
+      {/* BOT ASISTENTE DE INVENTARIO */}
+      <InventoryBot products={products} orders={orders} />
 
       {/* --- SIDEBAR DESKTOP --- */}
-      <aside id="admin-sidebar" className="hidden lg:flex w-64 bg-white border-r border-gray-100 flex-col fixed h-full z-20">
-          <div className="p-6 border-b border-gray-100 flex items-center gap-2">
-              <div className="bg-gray-900 p-1.5 rounded-lg text-white shadow-lg"><LayoutDashboard className="w-6 h-6"/></div>
-              <span className="font-black text-xl tracking-tight">Panel Jefe</span>
+      <aside id="admin-sidebar" className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col fixed h-full z-20 shadow-sm">
+          <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+              <div className="bg-slate-900 p-2 rounded-xl text-white shadow-lg"><LayoutDashboard className="w-6 h-6"/></div>
+              <div>
+                  <span className="font-black text-xl tracking-tight block leading-none">Jormard</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Admin Panel</span>
+              </div>
           </div>
           <nav className="flex-1 p-4 space-y-1">
-              <button id="nav-dashboard" onClick={() => setCurrentView('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'dashboard' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><BarChart3 className="w-5 h-5"/> Resumen</button>
-              <button id="nav-orders" onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+              <button id="nav-dashboard" onClick={() => setCurrentView('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'dashboard' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 className="w-5 h-5"/> Resumen</button>
+              <button id="nav-orders" onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'orders' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
                   <ShoppingBag className="w-5 h-5"/> Pedidos 
-                  {pendientes > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pendientes}</span>}
+                  {pendientes > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">{pendientes}</span>}
               </button>
-              <button id="nav-inventory" onClick={() => setCurrentView('inventory')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'inventory' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Package className="w-5 h-5"/> Inventario</button>
-              <button id="nav-customers" onClick={() => setCurrentView('customers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'customers' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Users className="w-5 h-5"/> Clientes</button>
+              <button id="nav-inventory" onClick={() => setCurrentView('inventory')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'inventory' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Package className="w-5 h-5"/> Inventario</button>
+              <button id="nav-customers" onClick={() => setCurrentView('customers')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'customers' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Users className="w-5 h-5"/> Clientes</button>
           </nav>
-          <div className="p-4 border-t border-gray-100 space-y-2">
-             <button onClick={() => setShowGuide(true)} className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-gray-500 hover:text-blue-600 rounded-xl hover:bg-blue-50 transition"><HelpCircle className="w-4 h-4"/> Ver Tutorial</button>
-             <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-red-500 hover:text-red-600 rounded-xl hover:bg-red-50 transition"><LogOut className="w-4 h-4"/> Cerrar Sesión</button>
+          <div className="p-4 border-t border-slate-100 space-y-2">
+             <button onClick={() => setShowGuide(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:text-indigo-600 rounded-xl hover:bg-indigo-50 transition"><HelpCircle className="w-4 h-4"/> Tutorial</button>
+             <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:text-red-600 rounded-xl hover:bg-red-50 transition"><LogOut className="w-4 h-4"/> Salir</button>
           </div>
       </aside>
 
@@ -560,16 +768,16 @@ export default function AdminDashboard() {
       <AnimatePresence>
          {isMobileMenuOpen && (
              <>
-                <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={() => setIsMobileMenuOpen(false)} className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"/>
+                <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={() => setIsMobileMenuOpen(false)} className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm"/>
                 <motion.div initial={{x:'-100%'}} animate={{x:0}} exit={{x:'-100%'}} className="fixed left-0 top-0 h-full w-[280px] bg-white z-50 shadow-2xl flex flex-col lg:hidden">
-                    <div className="p-6 bg-gray-900 text-white flex items-center gap-3">
+                    <div className="p-6 bg-slate-900 text-white flex items-center gap-3">
                         <LayoutDashboard className="w-6 h-6"/> <span className="font-black text-xl">Panel Jefe</span>
                     </div>
                     <nav className="flex-1 p-4 space-y-1">
-                        <button id="nav-dashboard-mobile" onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'dashboard' ? 'bg-orange-50 text-orange-600' : 'text-gray-600'}`}><BarChart3 className="w-5 h-5"/> Resumen</button>
-                        <button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-600'}`}><ShoppingBag className="w-5 h-5"/> Pedidos</button>
-                        <button id="nav-inventory-mobile" onClick={() => { setCurrentView('inventory'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'inventory' ? 'bg-orange-50 text-orange-600' : 'text-gray-600'}`}><Package className="w-5 h-5"/> Inventario</button>
-                        <button id="nav-customers-mobile" onClick={() => { setCurrentView('customers'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'customers' ? 'bg-orange-50 text-orange-600' : 'text-gray-600'}`}><Users className="w-5 h-5"/> Clientes</button>
+                        <button id="nav-dashboard-mobile" onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'dashboard' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><BarChart3 className="w-5 h-5"/> Resumen</button>
+                        <button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'orders' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><ShoppingBag className="w-5 h-5"/> Pedidos</button>
+                        <button id="nav-inventory-mobile" onClick={() => { setCurrentView('inventory'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'inventory' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><Package className="w-5 h-5"/> Inventario</button>
+                        <button id="nav-customers-mobile" onClick={() => { setCurrentView('customers'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'customers' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><Users className="w-5 h-5"/> Clientes</button>
                     </nav>
                     <div className="p-4">
                         <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-50 text-red-600 font-bold hover:bg-red-100"><LogOut className="w-5 h-5"/> Salir</button>
@@ -584,52 +792,52 @@ export default function AdminDashboard() {
          {/* Top Bar Mobile */}
          <div className="lg:hidden flex items-center justify-between mb-6">
              <div className="flex items-center gap-3">
-                 <button id="admin-menu-btn" onClick={() => setIsMobileMenuOpen(true)} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100"><Menu className="w-6 h-6 text-gray-700"/></button>
-                 <span className="font-extrabold text-lg text-gray-900">Bodega Jormard</span>
+                 <button id="admin-menu-btn" onClick={() => setIsMobileMenuOpen(true)} className="p-2 bg-white rounded-xl shadow-sm border border-slate-200"><Menu className="w-6 h-6 text-slate-700"/></button>
+                 <span className="font-extrabold text-lg text-slate-900">Bodega Jormard</span>
              </div>
-             <button onClick={() => { playNotificationSound(); showToast("Sonido OK 🔊", 'success'); }} className="p-2 bg-white rounded-full shadow-sm"><Volume2 className="w-5 h-5 text-gray-400"/></button>
+             <button onClick={() => { playNotificationSound(); showToast("Sonido OK 🔊", 'success'); }} className="p-2 bg-white rounded-full shadow-sm"><Volume2 className="w-5 h-5 text-slate-400"/></button>
          </div>
 
          {/* Vista: Dashboard */}
          {currentView === 'dashboard' && (
-             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                      <div>
-                         <h1 className="text-3xl font-black text-gray-900 tracking-tight">Buenos días, Jefe 👋</h1>
-                         <p className="text-gray-500">Aquí tienes el resumen de hoy.</p>
+                         <h1 className="text-4xl font-black text-slate-900 tracking-tight">Buenos días, Jefe 👋</h1>
+                         <p className="text-slate-500 font-medium mt-1">Aquí tienes el resumen de hoy.</p>
                      </div>
                      <div className="flex gap-2">
-                        <button onClick={() => { playNotificationSound(); showToast("Sonido OK", 'success'); }} className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50"><Volume2 className="w-4 h-4"/> Probar Sonido</button>
+                        <button onClick={() => { playNotificationSound(); showToast("Sonido OK", 'success'); }} className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 shadow-sm"><Volume2 className="w-4 h-4"/> Probar Sonido</button>
                      </div>
                  </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <StatCard title="Ventas Totales" value={`S/ ${totalVentas.toFixed(2)}`} icon={<TrendingUp className="w-6 h-6 text-green-600"/>} color="text-green-600" subtext="+12% vs ayer"/>
-                    <StatCard title="Pedidos Pendientes" value={`${pendientes}`} icon={<Bell className="w-6 h-6 text-orange-600"/>} color="text-orange-600" subtext="Requieren atención"/>
-                    <StatCard title="Inventario Bajo" value={`${lowStock}`} icon={<AlertTriangle className="w-6 h-6 text-red-600"/>} color="text-red-600" subtext="Productos < 5 un."/>
-                    <StatCard title="Clientes Totales" value={`${uniqueCustomers.length}`} icon={<Users className="w-6 h-6 text-blue-600"/>} color="text-blue-600" subtext="Registrados"/>
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <StatCard title="Ventas Totales" value={`S/ ${totalVentas.toFixed(2)}`} icon={<TrendingUp className="w-8 h-8 text-emerald-600"/>} color="text-emerald-600" subtext="Ingresos netos"/>
+                    <StatCard title="Pedidos Pendientes" value={`${pendientes}`} icon={<Bell className="w-8 h-8 text-orange-600"/>} color="text-orange-600" subtext="Requieren atención"/>
+                    <StatCard title="Inventario Bajo" value={`${lowStock}`} icon={<AlertTriangle className="w-8 h-8 text-red-600"/>} color="text-red-600" subtext="Productos < 5 un."/>
+                    <StatCard title="Clientes Totales" value={`${uniqueCustomers.length}`} icon={<Users className="w-8 h-8 text-blue-600"/>} color="text-blue-600" subtext="Registrados"/>
                  </div>
 
-                 <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                     <h3 className="font-bold text-gray-900 mb-4">Últimos Pedidos</h3>
+                 <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                     <h3 className="text-xl font-bold text-slate-900 mb-6">Últimos Pedidos</h3>
                      <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
-                            <thead className="text-gray-400 font-bold uppercase text-xs border-b border-gray-100">
-                                <tr><th className="pb-3">ID</th><th className="pb-3">Cliente</th><th className="pb-3">Monto</th><th className="pb-3">Estado</th></tr>
+                            <thead className="text-slate-400 font-bold uppercase text-xs border-b border-slate-100">
+                                <tr><th className="pb-4 pl-2">ID</th><th className="pb-4">Cliente</th><th className="pb-4">Monto</th><th className="pb-4">Estado</th></tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-slate-50">
                                 {orders.slice(0, 5).map(o => (
-                                    <tr key={o.id} className="group hover:bg-gray-50 transition cursor-pointer" onClick={() => {setSelectedOrder(o); setCurrentView('orders')}}>
-                                            <td className="py-3 font-medium">#{o.id}</td>
-                                            <td className="py-3">{o.cliente_nombre}</td>
-                                            <td className="py-3 font-bold">S/ {o.total.toFixed(2)}</td>
-                                            <td className="py-3"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${o.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' : o.estado === 'pagado' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>{o.estado}</span></td>
+                                    <tr key={o.id} className="group hover:bg-slate-50 transition cursor-pointer" onClick={() => {setSelectedOrder(o); setCurrentView('orders')}}>
+                                            <td className="py-4 pl-2 font-bold text-slate-600">#{o.id}</td>
+                                            <td className="py-4 font-medium text-slate-900">{o.cliente_nombre}</td>
+                                            <td className="py-4 font-black text-slate-900">S/ {o.total.toFixed(2)}</td>
+                                            <td className="py-4"><span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${o.estado === 'pendiente' ? 'bg-orange-100 text-orange-700' : o.estado === 'pagado' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>{o.estado.toUpperCase()}</span></td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                      </div>
-                     <button onClick={() => setCurrentView('orders')} className="w-full mt-4 py-3 bg-gray-50 text-gray-600 font-bold rounded-xl hover:bg-gray-100 transition flex items-center justify-center gap-2">Ver todos los pedidos <ArrowRight className="w-4 h-4"/></button>
+                     <button onClick={() => setCurrentView('orders')} className="w-full mt-6 py-4 bg-slate-50 text-slate-600 font-bold rounded-2xl hover:bg-slate-100 transition flex items-center justify-center gap-2 border border-slate-100">Ver todos los pedidos <ArrowRight className="w-4 h-4"/></button>
                  </div>
              </div>
          )}
@@ -638,46 +846,44 @@ export default function AdminDashboard() {
          {currentView === 'orders' && (
              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <h2 className="text-2xl font-black text-gray-900">Gestión de Pedidos</h2>
-                    <div className="relative w-full sm:w-72">
-                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400"/>
-                        <input type="text" placeholder="Buscar cliente..." value={orderSearch} onChange={e => setOrderSearch(e.target.value)} className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none w-full shadow-sm"/>
+                    <h2 className="text-3xl font-black text-slate-900">Gestión de Pedidos</h2>
+                    <div className="relative w-full sm:w-80">
+                        <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400"/>
+                        <input type="text" placeholder="Buscar cliente..." value={orderSearch} onChange={e => setOrderSearch(e.target.value)} className="pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full shadow-sm font-medium"/>
                     </div>
                 </div>
 
-                {loading ? <div className="text-center py-20"><Loader2 className="animate-spin w-10 h-10 mx-auto text-gray-300"/></div> : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {loading ? <div className="text-center py-20"><Loader2 className="animate-spin w-12 h-12 mx-auto text-slate-300"/></div> : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     <AnimatePresence>
                     {orders
                       .filter(o => o.cliente_nombre.toLowerCase().includes(orderSearch.toLowerCase()))
                       .map((order) => (
                       <motion.div 
                         key={order.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                        className={`bg-white border rounded-2xl p-5 shadow-sm relative overflow-hidden cursor-pointer hover:shadow-lg transition-all group ${order.estado === 'pendiente' ? 'border-l-4 border-l-yellow-400' : ''} ${order.estado === 'pagado' ? 'border-l-4 border-l-purple-500 bg-purple-50/20' : ''} ${order.estado === 'atendido' ? 'opacity-60 border-gray-100 grayscale-[0.5]' : ''}`}
+                        className={`bg-white border rounded-3xl p-6 shadow-sm relative overflow-hidden cursor-pointer hover:shadow-xl transition-all group ${order.estado === 'pendiente' ? 'border-l-8 border-l-orange-400' : ''} ${order.estado === 'pagado' ? 'border-l-8 border-l-purple-500 bg-purple-50/10' : ''} ${order.estado === 'atendido' ? 'opacity-70 border-slate-200 grayscale-[0.3]' : ''}`}
                         onClick={() => setSelectedOrder(order)}
                       >
-                        {order.estado === 'pendiente' && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm">POR PAGAR</div>}
-                        {order.estado === 'pagado' && <div className="absolute top-0 right-0 bg-purple-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm flex gap-1 items-center"><CheckCircle2 className="w-3 h-3"/> LISTO</div>}
+                        {order.estado === 'pendiente' && <div className="absolute top-0 right-0 bg-orange-400 text-white text-[10px] font-black px-4 py-1.5 rounded-bl-2xl shadow-sm tracking-wider">POR PAGAR</div>}
+                        {order.estado === 'pagado' && <div className="absolute top-0 right-0 bg-purple-600 text-white text-[10px] font-black px-4 py-1.5 rounded-bl-2xl shadow-sm flex gap-1 items-center tracking-wider"><CheckCircle2 className="w-3 h-3"/> LISTO</div>}
                         
                         {order.comprobante_url && order.estado === 'pendiente' && (
-                            <div className="absolute top-8 right-3 animate-pulse">
-                                <div className="bg-purple-100 text-purple-700 p-1.5 rounded-full shadow-sm border border-purple-200"><Paperclip className="w-4 h-4" /></div>
+                            <div className="absolute top-10 right-4 animate-pulse">
+                                <div className="bg-purple-100 text-purple-700 p-2 rounded-full shadow-sm border border-purple-200"><Paperclip className="w-5 h-5" /></div>
                             </div>
                         )}
 
-                        <div className="flex justify-between items-start mb-4 pl-2">
-                            <div>
-                              <h3 className="font-bold text-gray-900 text-lg group-hover:text-orange-600 transition-colors">{order.cliente_nombre}</h3>
-                              <div className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-1"><Clock className="w-3 h-3" /> {new Date(order.created_at).toLocaleString()}</div>
-                            </div>
+                        <div className="mb-4 pl-2">
+                            <h3 className="font-bold text-slate-900 text-xl group-hover:text-indigo-600 transition-colors mb-1">{order.cliente_nombre}</h3>
+                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(order.created_at).toLocaleString()}</div>
                         </div>
 
-                        <div className="flex justify-between items-end pl-2 pt-2 border-t border-gray-100/50">
-                            <div className="text-xs text-gray-500 font-medium flex items-center gap-2">
-                              <span className="bg-gray-100 px-2 py-1 rounded-md text-gray-700">{order.items.length} items</span>
-                              {order.metodo_pago === 'yape' ? <span className="text-purple-600 font-bold text-[10px] uppercase">📱 Yape</span> : <span className="text-green-600 font-bold text-[10px] uppercase">💵 Efectivo</span>}
+                        <div className="flex justify-between items-end pl-2 pt-4 border-t border-slate-100">
+                            <div className="flex flex-col gap-1">
+                                <span className="bg-slate-100 px-3 py-1 rounded-lg text-slate-600 text-xs font-bold w-fit">{order.items.length} items</span>
+                                {order.metodo_pago === 'yape' ? <span className="text-purple-600 font-black text-xs uppercase flex items-center gap-1"><Zap size={12}/> Yape</span> : <span className="text-green-600 font-black text-xs uppercase flex items-center gap-1"><Banknote size={12}/> Efectivo</span>}
                             </div>
-                            <div className="text-xl font-black text-gray-900">S/ {order.total.toFixed(2)}</div>
+                            <div className="text-2xl font-black text-slate-900">S/ {order.total.toFixed(2)}</div>
                         </div>
                       </motion.div>
                     ))}
@@ -687,109 +893,110 @@ export default function AdminDashboard() {
              </div>
          )}
 
-         {/* Vista: Inventario (MODIFICADA: 2 Columnas MAX para mejor visibilidad) */}
+         {/* Vista: Inventario (MODIFICADA: 2 Columnas MAX) */}
          {currentView === 'inventory' && (
              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-4">
+                 {/* COLUMNA 1: FORMULARIO */}
                  <div className="lg:col-span-1" ref={formTopRef}>
-                     <div className={`bg-white p-6 rounded-3xl shadow-sm border sticky top-24 transition-colors ${editingId ? 'border-orange-300 ring-4 ring-orange-50' : 'border-gray-100'}`}>
-                         <h2 className="text-lg font-black flex items-center gap-2 mb-4">{editingId ? <Pencil className="w-5 h-5 text-orange-600"/> : <Plus className="w-5 h-5 text-orange-500"/>} {editingId ? "Editar Producto" : "Nuevo Producto"}</h2>
-                         <form onSubmit={handleSaveProduct} className="space-y-4">
-                             <div className="space-y-1" id="tour-form-basic">
-                                 <label className="text-[10px] uppercase font-bold text-gray-400">Nombre</label>
-                                 <input type="text" id="tour-product-name" value={newProduct.nombre} onChange={e => setNewProduct({...newProduct, nombre: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 transition-all font-medium" />
+                     <div className={`bg-white p-6 rounded-3xl shadow-sm border sticky top-24 transition-colors ${editingId ? 'border-orange-400 ring-4 ring-orange-50' : 'border-slate-200'}`}>
+                         <h2 className="text-xl font-black flex items-center gap-2 mb-6 text-slate-900">{editingId ? <Pencil className="w-6 h-6 text-orange-600"/> : <Plus className="w-6 h-6 text-indigo-600"/>} {editingId ? "Editar Producto" : "Nuevo Producto"}</h2>
+                         <form onSubmit={handleSaveProduct} className="space-y-5">
+                             <div className="space-y-1.5" id="tour-form-basic">
+                                 <label className="text-xs uppercase font-bold text-slate-400 tracking-wider">Nombre</label>
+                                 <input type="text" id="tour-product-name" value={newProduct.nombre} onChange={e => setNewProduct({...newProduct, nombre: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-slate-700" placeholder="Ej. Coca Cola 3L"/>
                              </div>
                              <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] uppercase font-bold text-gray-400">Precio</label>
-                                    <input type="number" step="0.10" id="tour-product-price" value={newProduct.precio} onChange={e => setNewProduct({...newProduct, precio: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" />
+                                <div className="space-y-1.5">
+                                    <label className="text-xs uppercase font-bold text-slate-400 tracking-wider">Precio</label>
+                                    <input type="number" step="0.10" id="tour-product-price" value={newProduct.precio} onChange={e => setNewProduct({...newProduct, precio: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700" placeholder="0.00" />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] uppercase font-bold text-gray-400">Stock</label>
-                                    <input type="number" id="tour-product-stock" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" />
+                                <div className="space-y-1.5">
+                                    <label className="text-xs uppercase font-bold text-slate-400 tracking-wider">Stock</label>
+                                    <input type="number" id="tour-product-stock" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700" placeholder="0" />
                                 </div>
                              </div>
-                             <div id="tour-form-offer" className={`border rounded-xl p-4 transition-all ${newProduct.oferta_activa ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-100'}`}>
+                             <div id="tour-form-offer" className={`border-2 rounded-2xl p-4 transition-all ${newProduct.oferta_activa ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-100'}`}>
                                 <div className="flex items-center justify-between mb-2">
-                                    <label className="flex items-center gap-2 text-xs font-bold uppercase text-gray-600 cursor-pointer select-none"><Zap className={`w-4 h-4 ${newProduct.oferta_activa ? 'text-orange-500 fill-orange-500' : 'text-gray-400'}`} /> Oferta Flash</label>
-                                    <div onClick={() => setNewProduct({...newProduct, oferta_activa: !newProduct.oferta_activa})} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${newProduct.oferta_activa ? 'bg-orange-500' : 'bg-gray-300'}`}>
-                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${newProduct.oferta_activa ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    <label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500 cursor-pointer select-none"><Zap className={`w-4 h-4 ${newProduct.oferta_activa ? 'text-orange-500 fill-orange-500' : 'text-slate-300'}`} /> Oferta Flash</label>
+                                    <div onClick={() => setNewProduct({...newProduct, oferta_activa: !newProduct.oferta_activa})} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-colors ${newProduct.oferta_activa ? 'bg-orange-500' : 'bg-slate-200'}`}>
+                                            <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${newProduct.oferta_activa ? 'translate-x-5' : 'translate-x-0'}`} />
                                     </div>
                                 </div>
                                 {newProduct.oferta_activa && (
                                     <motion.div initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: 'auto'}} className="space-y-3 pt-2">
-                                            <input type="number" step="0.10" placeholder="Precio Oferta" value={newProduct.precio_oferta} onChange={e => setNewProduct({...newProduct, precio_oferta: e.target.value})} className="w-full p-2 bg-white border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm font-bold text-orange-600" />
+                                            <input type="number" step="0.10" placeholder="Precio Oferta" value={newProduct.precio_oferta} onChange={e => setNewProduct({...newProduct, precio_oferta: e.target.value})} className="w-full p-2 bg-white border-2 border-orange-100 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm font-bold text-orange-600" />
                                             <div className="grid grid-cols-2 gap-2">
-                                                <input type="time" value={newProduct.hora_inicio} onChange={e => setNewProduct({...newProduct, hora_inicio: e.target.value})} className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs" />
-                                                <input type="time" value={newProduct.hora_fin} onChange={e => setNewProduct({...newProduct, hora_fin: e.target.value})} className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs" />
+                                                <input type="time" value={newProduct.hora_inicio} onChange={e => setNewProduct({...newProduct, hora_inicio: e.target.value})} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium" />
+                                                <input type="time" value={newProduct.hora_fin} onChange={e => setNewProduct({...newProduct, hora_fin: e.target.value})} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium" />
                                             </div>
                                     </motion.div>
                                 )}
                              </div>
-                             <div className="space-y-1">
-                                 <label className="text-[10px] uppercase font-bold text-gray-400">Categoría</label>
-                                 <select value={newProduct.categoria} onChange={e => setNewProduct({...newProduct, categoria: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium">
+                             <div className="space-y-1.5">
+                                 <label className="text-xs uppercase font-bold text-slate-400 tracking-wider">Categoría</label>
+                                 <select value={newProduct.categoria} onChange={e => setNewProduct({...newProduct, categoria: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
                                      <option value="">Seleccionar...</option>
                                      {CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                  </select>
                              </div>
-                             <div id="tour-form-image" onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-200 p-6 rounded-xl text-center cursor-pointer hover:bg-orange-50 hover:border-orange-200 transition-all group">
-                                {uploadingImage ? <Loader2 className="animate-spin mx-auto text-orange-500"/> : (newProduct.imagen_url ? <img src={newProduct.imagen_url} className="h-24 w-full object-contain rounded-lg"/> : <div className="text-gray-400 text-sm font-medium group-hover:text-orange-500"><Upload className="w-6 h-6 mx-auto mb-2"/>Subir Foto</div>)}
+                             <div id="tour-form-image" onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 p-8 rounded-2xl text-center cursor-pointer hover:bg-indigo-50 hover:border-indigo-300 transition-all group bg-slate-50">
+                                {uploadingImage ? <Loader2 className="animate-spin mx-auto text-indigo-500"/> : (newProduct.imagen_url ? <img src={newProduct.imagen_url} className="h-32 w-full object-contain rounded-lg"/> : <div className="text-slate-400 text-sm font-bold group-hover:text-indigo-500"><Upload className="w-8 h-8 mx-auto mb-2 text-slate-300 group-hover:text-indigo-400"/>Subir Foto</div>)}
                              </div>
                              <input type="file" ref={fileInputRef} hidden onChange={handleImageUpload} />
                              
-                             <div className="flex gap-2">
-                                 {editingId && <button type="button" onClick={resetForm} className="flex-1 bg-gray-100 text-gray-600 font-bold py-3.5 rounded-xl hover:bg-gray-200 transition">Cancelar</button>}
-                                 <button type="submit" className={`flex-1 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all active:scale-95 ${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-900 hover:bg-gray-800'}`}>{editingId ? "Actualizar" : "Guardar"}</button>
+                             <div className="flex gap-3 pt-2">
+                                 {editingId && <button type="button" onClick={resetForm} className="flex-1 bg-white border-2 border-slate-200 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-50 transition">Cancelar</button>}
+                                 <button type="submit" className={`flex-1 text-white font-bold py-4 rounded-xl shadow-xl transition-all active:scale-95 ${editingId ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-300'}`}>{editingId ? "Actualizar Producto" : "Guardar Producto"}</button>
                              </div>
                          </form>
                          
                          {!editingId && (
-                             <div id="tour-excel-actions" className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-2 gap-2">
-                                 <button onClick={handleDownloadTemplate} className="bg-white border border-gray-200 text-gray-600 font-bold py-2 rounded-xl text-xs hover:bg-gray-50 flex items-center justify-center gap-1"><FileDown size={14}/> Plantilla</button>
-                                 <button id="tour-excel-btn" onClick={() => excelInputRef.current?.click()} className="bg-green-50 border border-green-200 text-green-700 font-bold py-2 rounded-xl text-xs hover:bg-green-100 flex items-center justify-center gap-1"><FileSpreadsheet size={14}/> Importar Excel</button>
+                             <div id="tour-excel-actions" className="mt-8 pt-6 border-t border-slate-100 grid grid-cols-2 gap-3">
+                                 <button onClick={handleDownloadTemplate} className="bg-white border-2 border-slate-100 text-slate-600 font-bold py-3 rounded-xl text-xs hover:border-slate-300 flex items-center justify-center gap-2"><FileDown size={16}/> Plantilla</button>
+                                 <button id="tour-excel-btn" onClick={() => excelInputRef.current?.click()} className="bg-green-50 border-2 border-green-100 text-green-700 font-bold py-3 rounded-xl text-xs hover:bg-green-100 flex items-center justify-center gap-2"><FileSpreadsheet size={16}/> Carga Masiva</button>
                                  <input type="file" ref={excelInputRef} hidden accept=".xlsx" onChange={handleExcelUpload} />
                              </div>
                          )}
                      </div>
                  </div>
 
-                 <div className="lg:col-span-3 space-y-6">
+                 <div className="lg:col-span-3 space-y-8">
                      <div className="relative">
-                        <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
-                        <input type="text" placeholder="Buscar producto..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl w-full text-sm focus:ring-2 focus:ring-orange-500 outline-none shadow-sm"/>
+                        <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400"/>
+                        <input type="text" placeholder="Buscar producto por nombre..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl w-full text-base font-medium focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"/>
                      </div>
                      
-                     {/* AQUÍ ESTÁ EL CAMBIO: GRID DE 2 COLUMNAS (1 columna en movil) */}
+                     {/* INVENTARIO: 2 COLUMNAS PARA MEJOR VISIBILIDAD */}
                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                        {Object.entries(groupedProducts).map(([categoria, prods]) => {
                            if (prods.length === 0) return null;
                            return (
-                              <div key={categoria} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-full">
-                                  <div className="flex items-center gap-3 mb-4 pb-2 border-b border-gray-50">
-                                      <div className="bg-orange-100 p-2 rounded-lg text-orange-600"><Tags className="w-5 h-5"/></div>
-                                      <h3 className="font-black text-gray-900 text-xl uppercase tracking-tight">{categoria} <span className="text-gray-400 text-sm font-medium ml-2">({prods.length})</span></h3>
+                              <div key={categoria} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col h-full">
+                                  <div className="flex items-center gap-3 mb-6 pb-2 border-b border-slate-50">
+                                      <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600"><Tags className="w-5 h-5"/></div>
+                                      <h3 className="font-black text-slate-800 text-xl uppercase tracking-tight">{categoria} <span className="text-slate-400 text-sm font-bold ml-2 bg-slate-100 px-2 py-0.5 rounded-full">{prods.length}</span></h3>
                                   </div>
                                   
-                                  <div className="flex-1 space-y-3 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
+                                  <div className="flex-1 space-y-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
                                       <AnimatePresence>
                                       {prods.map(p => (
-                                          <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`flex items-center gap-4 p-3 rounded-2xl border transition-all cursor-pointer hover:shadow-md ${editingId === p.id ? 'border-orange-400 bg-orange-50' : 'border-gray-100 bg-gray-50 hover:bg-white'}`}>
-                                              <div className="w-14 h-14 bg-white rounded-xl flex-shrink-0 relative overflow-hidden border border-gray-200">
+                                          <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-lg ${editingId === p.id ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-slate-100 bg-white hover:border-indigo-100'}`}>
+                                              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex-shrink-0 relative overflow-hidden border border-slate-100">
                                                   <img src={p.imagen_url} className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} />
-                                                  {p.oferta_activa && <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center"><Zap className="w-4 h-4 text-white drop-shadow-sm"/></div>}
+                                                  {p.oferta_activa && <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center backdrop-blur-[1px]"><Zap className="w-6 h-6 text-white drop-shadow-md"/></div>}
                                               </div>
                                               <div className="flex-1 min-w-0">
-                                                  <h4 className="font-bold text-gray-900 text-base truncate" title={p.nombre}>{p.nombre}</h4>
-                                                  <div className="flex justify-between items-end mt-1">
-                                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-600'}`}>Stock: {p.stock}</span>
+                                                  <h4 className="font-bold text-slate-900 text-lg truncate" title={p.nombre}>{p.nombre}</h4>
+                                                  <div className="flex justify-between items-end mt-2">
+                                                      <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stock: {p.stock}</span>
                                                       <div className="text-right">
-                                                          {p.oferta_activa ? <><span className="block text-[10px] text-gray-400 line-through">S/ {p.precio.toFixed(2)}</span><span className="font-black text-orange-600 text-base">S/ {p.precio_oferta?.toFixed(2)}</span></> : <span className="font-black text-gray-900 text-base">S/ {p.precio.toFixed(2)}</span>}
+                                                          {p.oferta_activa ? <><span className="block text-xs text-slate-400 line-through font-bold">S/ {p.precio.toFixed(2)}</span><span className="font-black text-orange-600 text-xl">S/ {p.precio_oferta?.toFixed(2)}</span></> : <span className="font-black text-slate-900 text-xl">S/ {p.precio.toFixed(2)}</span>}
                                                       </div>
                                                   </div>
                                               </div>
                                               <div className="flex flex-col gap-2">
-                                                  <button onClick={() => handleEditClick(p)} className="p-2 bg-white border border-gray-200 rounded-lg hover:text-orange-600 hover:border-orange-300 transition-colors"><Pencil size={16}/></button>
-                                                  <button onClick={() => handleDeleteProduct(p.id)} className="p-2 bg-white border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-300 transition-colors"><Trash2 size={16}/></button>
+                                                  <button onClick={() => handleEditClick(p)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors"><Pencil size={18}/></button>
+                                                  <button onClick={() => handleDeleteProduct(p.id)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"><Trash2 size={18}/></button>
                                               </div>
                                           </motion.div>
                                       ))}
@@ -801,59 +1008,61 @@ export default function AdminDashboard() {
                      </div>
 
                      {Object.keys(groupedProducts).length === 0 && (
-                         <div className="text-center py-20 opacity-50">
-                             <Package className="w-20 h-20 mx-auto mb-4 text-gray-300"/>
-                             <p className="text-lg">No hay productos que coincidan.</p>
+                         <div className="text-center py-32 opacity-40">
+                             <Package className="w-24 h-24 mx-auto mb-6 text-slate-300"/>
+                             <p className="text-xl font-bold text-slate-400">No hay productos que coincidan.</p>
                          </div>
                      )}
                  </div>
              </div>
          )}
 
-         {/* Vista: Clientes (MEJORADA) */}
+         {/* Vista: Clientes */}
          {currentView === 'customers' && (
-             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                     <h2 className="text-2xl font-black text-gray-900">Cartera de Clientes</h2>
-                     <div className="relative w-full sm:w-72">
-                         <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400"/>
-                         <input type="text" placeholder="Buscar cliente..." value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none w-full shadow-sm"/>
+             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                 <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
+                     <h2 className="text-3xl font-black text-slate-900">Cartera de Clientes</h2>
+                     <div className="relative w-full sm:w-96">
+                         <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400"/>
+                         <input type="text" placeholder="Buscar cliente por nombre o teléfono..." value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} className="pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-base font-medium focus:ring-2 focus:ring-indigo-500 outline-none w-full shadow-sm"/>
                      </div>
                  </div>
                  
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                      {filteredCustomers.length === 0 ? (
-                         <div className="col-span-full text-center py-20 opacity-50">
-                             <Users className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
-                             <p>No se encontraron clientes.</p>
+                         <div className="col-span-full text-center py-32 opacity-40">
+                             <Users className="w-24 h-24 mx-auto mb-6 text-slate-300"/>
+                             <p className="text-xl font-bold text-slate-400">No se encontraron clientes.</p>
                          </div>
                      ) : (
                          filteredCustomers.map((customer, idx) => (
-                             <motion.div initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} transition={{delay: idx*0.05}} key={idx} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg transition-all group flex flex-col gap-4">
-                                 <div className="flex items-center gap-4">
-                                     <div className={`w-14 h-14 rounded-full flex items-center justify-center font-bold text-xl shadow-inner ${getAvatarColor(customer.name)}`}>
+                             <motion.div initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} transition={{delay: idx*0.05}} key={idx} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group flex flex-col gap-5 relative overflow-hidden">
+                                 <div className={`absolute top-0 right-0 p-8 rounded-bl-3xl opacity-10 ${getAvatarColor(customer.name).replace('text', 'bg')}`}></div>
+                                 
+                                 <div className="flex items-center gap-4 relative z-10">
+                                     <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl shadow-sm ${getAvatarColor(customer.name)}`}>
                                          {customer.name.charAt(0)}
                                      </div>
                                      <div className="overflow-hidden">
-                                         <h3 className="font-bold text-gray-900 truncate" title={customer.name}>{customer.name}</h3>
-                                         <p className="text-xs text-gray-400 flex items-center gap-1"><Phone className="w-3 h-3"/> {customer.phone}</p>
+                                         <h3 className="font-bold text-slate-900 text-lg truncate" title={customer.name}>{customer.name}</h3>
+                                         <p className="text-sm text-slate-500 font-medium flex items-center gap-1.5 mt-1"><Phone className="w-3.5 h-3.5"/> {customer.phone}</p>
                                      </div>
                                  </div>
                                  
-                                 <div className="grid grid-cols-2 gap-2 text-center bg-gray-50 rounded-xl p-2">
+                                 <div className="grid grid-cols-2 gap-3 text-center bg-slate-50 rounded-2xl p-3 border border-slate-100">
                                      <div>
-                                         <p className="text-[10px] text-gray-400 font-bold uppercase">Pedidos</p>
-                                         <p className="font-black text-gray-900">{customer.orderCount}</p>
+                                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Pedidos</p>
+                                         <p className="font-black text-xl text-slate-900">{customer.orderCount}</p>
                                      </div>
                                      <div>
-                                         <p className="text-[10px] text-gray-400 font-bold uppercase">Gastado</p>
-                                         <p className="font-black text-green-600">S/ {customer.totalSpent.toFixed(2)}</p>
+                                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Gastado</p>
+                                         <p className="font-black text-xl text-emerald-600">S/ {customer.totalSpent.toFixed(2)}</p>
                                      </div>
                                  </div>
 
-                                 <div className="flex justify-between items-center text-xs text-gray-400 border-t border-gray-100 pt-3">
-                                     <span className="flex items-center gap-1"><Calendar className="w-3 h-3"/> Último pedido:</span>
-                                     <span className="font-medium text-gray-600">{new Date(customer.lastOrder).toLocaleDateString()}</span>
+                                 <div className="flex justify-between items-center text-xs text-slate-400 border-t border-slate-50 pt-4">
+                                     <span className="flex items-center gap-1.5 font-bold uppercase tracking-wide"><Calendar className="w-3.5 h-3.5"/> Último pedido</span>
+                                     <span className="font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md">{new Date(customer.lastOrder).toLocaleDateString()}</span>
                                  </div>
                              </motion.div>
                          ))
@@ -866,98 +1075,100 @@ export default function AdminDashboard() {
       {/* --- MODAL DETALLE PEDIDO --- */}
       <AnimatePresence>
         {selectedOrder && (
-          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl relative" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md" onClick={() => setSelectedOrder(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-white w-full max-w-lg rounded-[2rem] overflow-hidden shadow-2xl relative border border-white/20" onClick={e => e.stopPropagation()}>
                 
-                <div className={`p-6 text-white flex justify-between items-start ${selectedOrder.estado === 'pendiente' ? 'bg-gradient-to-r from-gray-900 to-gray-800' : selectedOrder.estado === 'pagado' ? 'bg-gradient-to-r from-purple-600 to-indigo-600' : 'bg-gradient-to-r from-green-600 to-emerald-600'}`}>
+                <div className={`p-8 text-white flex justify-between items-start ${selectedOrder.estado === 'pendiente' ? 'bg-slate-900' : selectedOrder.estado === 'pagado' ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-3 mb-2">
                       <h2 className="text-3xl font-black tracking-tight">Pedido #{selectedOrder.id}</h2>
-                      <button onClick={() => copyToClipboard(`Pedido #${selectedOrder.id}`)} className="text-white/50 hover:text-white"><Copy className="w-4 h-4"/></button>
+                      <button onClick={() => copyToClipboard(`Pedido #${selectedOrder.id}`)} className="bg-white/10 p-1.5 rounded-lg hover:bg-white/20 transition"><Copy className="w-4 h-4"/></button>
                     </div>
-                    <p className="text-white/70 text-sm font-medium">{new Date(selectedOrder.created_at).toLocaleString()}</p>
+                    <p className="text-white/80 text-sm font-bold flex items-center gap-2"><Clock className="w-4 h-4"/> {new Date(selectedOrder.created_at).toLocaleString()}</p>
                   </div>
-                  <button onClick={() => setSelectedOrder(null)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition"><X className="w-5 h-5 text-white"/></button>
+                  <button onClick={() => setSelectedOrder(null)} className="bg-white/10 p-2.5 rounded-full hover:bg-white/20 transition"><X className="w-6 h-6 text-white"/></button>
                 </div>
                 
-                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                <div className="p-8 max-h-[60vh] overflow-y-auto bg-slate-50">
                     {/* EVIDENCIA DE PAGO */}
                     {selectedOrder.metodo_pago === 'yape' && selectedOrder.comprobante_url && (
-                        <div className="mb-6 bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group">
-                           <div className="absolute top-0 right-0 bg-purple-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10">EVIDENCIA</div>
-                           <div className="h-20 w-20 rounded-xl bg-gray-200 flex-shrink-0 overflow-hidden cursor-pointer shadow-sm border border-purple-100" onClick={() => window.open(selectedOrder.comprobante_url, '_blank')}>
-                              <img src={selectedOrder.comprobante_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                        <div className="mb-8 bg-white border border-indigo-100 rounded-3xl p-5 flex items-center gap-5 relative overflow-hidden shadow-sm">
+                           <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-black px-4 py-1.5 rounded-bl-2xl z-10 tracking-widest">EVIDENCIA</div>
+                           <div className="h-24 w-24 rounded-2xl bg-slate-200 flex-shrink-0 overflow-hidden cursor-pointer shadow-inner border border-slate-100" onClick={() => window.open(selectedOrder.comprobante_url, '_blank')}>
+                              <img src={selectedOrder.comprobante_url} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />
                            </div>
                            <div className="flex-1">
-                               <p className="text-sm font-bold text-purple-900 uppercase">Pago con Yape/Plin</p>
-                               <button onClick={() => window.open(selectedOrder.comprobante_url, '_blank')} className="mt-2 text-xs bg-white border border-purple-200 text-purple-700 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 hover:bg-purple-100 transition-colors">
-                                  <Eye className="w-3 h-3"/> Ver Voucher
+                               <p className="text-sm font-black text-indigo-900 uppercase mb-2">Pago con Yape/Plin</p>
+                               <button onClick={() => window.open(selectedOrder.comprobante_url, '_blank')} className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-100 transition-colors w-fit">
+                                  <Eye className="w-4 h-4"/> Ver Comprobante
                                </button>
                            </div>
                         </div>
                     )}
 
                     {selectedOrder.metodo_pago === 'yape' && !selectedOrder.comprobante_url && (
-                        <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-center gap-3">
-                           <AlertTriangle className="w-6 h-6 text-yellow-600"/>
-                           <div><p className="text-sm font-bold text-yellow-900">Pago Yape sin Evidencia</p><p className="text-xs text-yellow-700">El cliente no subió foto. Verifica manualmente.</p></div>
+                        <div className="mb-8 bg-orange-50 border border-orange-200 rounded-3xl p-5 flex items-center gap-4">
+                           <div className="bg-orange-100 p-3 rounded-full"><AlertTriangle className="w-6 h-6 text-orange-600"/></div>
+                           <div><p className="text-sm font-black text-orange-900 uppercase">Sin Evidencia</p><p className="text-sm text-orange-800 font-medium">El cliente no subió foto. Verifica su Yape manualmente.</p></div>
                         </div>
                     )}
 
-                    <div className="bg-gray-50 border border-gray-100 p-5 rounded-2xl mb-6 space-y-3">
-                      <div className="flex items-start gap-3">
-                          <div className="bg-white p-2 rounded-lg shadow-sm"><Eye className="w-4 h-4 text-gray-900"/></div>
-                          <div><p className="text-xs text-gray-400 font-bold uppercase">Cliente</p><p className="font-bold text-gray-900">{selectedOrder.cliente_nombre}</p></div>
+                    <div className="bg-white border border-slate-200 p-6 rounded-3xl mb-8 space-y-5 shadow-sm">
+                      <div className="flex items-start gap-4">
+                          <div className="bg-slate-100 p-3 rounded-2xl"><Users className="w-5 h-5 text-slate-700"/></div>
+                          <div><p className="text-xs text-slate-400 font-black uppercase tracking-wider">Cliente</p><p className="font-bold text-slate-900 text-lg">{selectedOrder.cliente_nombre}</p></div>
                       </div>
-                      <div className="flex items-start gap-3">
-                          <div className="bg-white p-2 rounded-lg shadow-sm"><MapPin className="w-4 h-4 text-gray-900"/></div>
+                      <div className="flex items-start gap-4">
+                          <div className="bg-slate-100 p-3 rounded-2xl"><MapPin className="w-5 h-5 text-slate-700"/></div>
                           <div className="flex-1">
-                            <p className="text-xs text-gray-400 font-bold uppercase">Dirección</p>
-                            <p className="font-medium text-gray-700 text-sm break-words">{selectedOrder.tipo_entrega === 'delivery' ? selectedOrder.direccion : 'Recojo en Tienda'}</p>
+                            <p className="text-xs text-slate-400 font-black uppercase tracking-wider">Dirección</p>
+                            <p className="font-medium text-slate-700 text-base break-words mt-0.5">{selectedOrder.tipo_entrega === 'delivery' ? selectedOrder.direccion : 'Recojo en Tienda'}</p>
                             {selectedOrder.tipo_entrega === 'delivery' && (
-                                <button onClick={() => handleOpenMap(selectedOrder.direccion)} className="mt-2 text-xs flex items-center gap-1.5 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 transition-colors border border-blue-100">
-                                    <Map className="w-3 h-3" /> Ver en Mapa <ExternalLink className="w-3 h-3"/>
+                                <button onClick={() => handleOpenMap(selectedOrder.direccion)} className="mt-3 text-xs flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-xl font-bold hover:bg-blue-100 transition-colors border border-blue-100 w-fit">
+                                    <Map className="w-4 h-4" /> Ver en Google Maps <ExternalLink className="w-3 h-3"/>
                                 </button>
                             )}
                           </div>
                       </div>
-                      <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
-                          <span className="font-bold text-blue-600">{selectedOrder.cliente_telefono}</span>
-                          <button onClick={() => copyToClipboard(selectedOrder.cliente_telefono)} className="text-xs font-bold text-gray-400 hover:text-gray-600 flex items-center gap-1"><Copy className="w-3 h-3"/> COPIAR</button>
+                      <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                          <span className="font-black text-indigo-600 text-lg tracking-wide">{selectedOrder.cliente_telefono}</span>
+                          <button onClick={() => copyToClipboard(selectedOrder.cliente_telefono)} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1.5"><Copy className="w-4 h-4"/> COPIAR</button>
                       </div>
                     </div>
 
-                    <div className="space-y-3">
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Productos</p>
-                        {selectedOrder.items.map((item, idx) => (
-                           <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
-                              <div className="flex items-center gap-3">
-                                <span className="bg-gray-100 text-gray-700 font-bold w-8 h-8 flex items-center justify-center rounded-lg text-sm">{item.cantidad}</span>
-                                <span className="font-medium text-gray-700">{item.nombre}</span>
-                              </div>
-                              <span className="font-bold text-gray-900">S/ {(item.precio * item.cantidad).toFixed(2)}</span>
-                           </div>
-                        ))}
+                    <div className="space-y-4">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest pl-2">Productos ({selectedOrder.items.length})</p>
+                        <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+                            {selectedOrder.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition">
+                                <div className="flex items-center gap-4">
+                                    <span className="bg-slate-900 text-white font-black w-8 h-8 flex items-center justify-center rounded-lg text-sm">{item.cantidad}</span>
+                                    <span className="font-bold text-slate-700">{item.nombre}</span>
+                                </div>
+                                <span className="font-black text-slate-900">S/ {(item.precio * item.cantidad).toFixed(2)}</span>
+                            </div>
+                            ))}
+                        </div>
                     </div>
                     
-                    <div className="flex justify-between items-center mt-6 pt-6 border-t border-gray-100">
-                        <div className="flex flex-col"><span className="text-gray-500 font-medium text-sm">Total a cobrar</span><span className="text-[10px] text-gray-400 uppercase font-bold">{selectedOrder.metodo_pago === 'yape' ? 'Vía Yape/Plin' : 'En Efectivo'}</span></div>
-                        <span className="text-3xl font-black text-gray-900">S/ {selectedOrder.total.toFixed(2)}</span>
+                    <div className="flex justify-between items-center mt-8 pt-6 border-t-2 border-slate-200">
+                        <div className="flex flex-col"><span className="text-slate-500 font-bold text-sm">Total a cobrar</span><span className="text-xs text-slate-400 uppercase font-black tracking-wider">{selectedOrder.metodo_pago === 'yape' ? 'Vía Yape/Plin' : 'En Efectivo'}</span></div>
+                        <span className="text-4xl font-black text-slate-900 tracking-tight">S/ {selectedOrder.total.toFixed(2)}</span>
                     </div>
                 </div>
 
-                <div className="p-6 bg-gray-50 border-t border-gray-100">
+                <div className="p-8 bg-white border-t border-slate-100">
                   {selectedOrder.estado === 'pendiente' && (
-                    <div className="flex gap-3">
-                      <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'cancelado')} className="flex-1 py-4 rounded-xl border-2 border-gray-200 font-bold text-gray-400 hover:border-red-200 hover:text-red-500 hover:bg-red-50 transition-all">Cancelar</button>
-                      <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'pagado')} className="flex-[2] py-4 rounded-xl bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-lg shadow-purple-200 flex items-center justify-center gap-2 transform active:scale-95 transition-all"><Banknote className="w-5 h-5" /> Confirmar Pago</button>
+                    <div className="flex gap-4">
+                      <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'cancelado')} className="flex-1 py-4 rounded-2xl border-2 border-slate-200 font-bold text-slate-400 hover:border-red-200 hover:text-red-500 hover:bg-red-50 transition-all text-sm">Cancelar Pedido</button>
+                      <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'pagado')} className="flex-[2] py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-200 flex items-center justify-center gap-2 transform active:scale-95 transition-all text-sm uppercase tracking-wide"><Banknote className="w-5 h-5" /> Confirmar Pago</button>
                     </div>
                   )}
                   {selectedOrder.estado === 'pagado' && (
-                    <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'atendido')} className="w-full py-4 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 shadow-lg shadow-green-200 flex items-center justify-center gap-2 transform active:scale-95 transition-all text-lg"><CheckCircle2 className="w-6 h-6" /> {selectedOrder.tipo_entrega === 'delivery' ? 'Marcar como Enviado' : 'Marcar como Entregado'}</button>
+                    <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'atendido')} className="w-full py-5 rounded-2xl bg-emerald-500 text-white font-black hover:bg-emerald-600 shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 transform active:scale-95 transition-all text-lg uppercase tracking-wide"><CheckCircle2 className="w-6 h-6" /> {selectedOrder.tipo_entrega === 'delivery' ? 'Marcar como Enviado' : 'Marcar como Entregado'}</button>
                   )}
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <button onClick={() => handleDeleteOrder(selectedOrder.id)} className="w-full py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 hover:shadow-md transition-all flex items-center justify-center gap-2 opacity-80 hover:opacity-100"><Trash2 className="w-4 h-4" /> Eliminar Definitivamente</button>
+                  <div className="mt-6 text-center">
+                    <button onClick={() => handleDeleteOrder(selectedOrder.id)} className="text-red-400 font-bold text-xs hover:text-red-600 flex items-center justify-center gap-2 mx-auto hover:bg-red-50 px-4 py-2 rounded-xl transition"><Trash2 className="w-4 h-4" /> Eliminar Definitivamente</button>
                   </div>
                 </div>
             </motion.div>
