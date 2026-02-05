@@ -4,14 +4,22 @@ import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import * as XLSX from 'xlsx';
 import { 
   Plus, Trash2, BarChart3, Upload, FileSpreadsheet, X, Loader2, Menu, Clock, 
   CheckCircle2, MapPin, Eye, Banknote, Search, AlertTriangle, 
   TrendingUp, Copy, Bell, LogOut, Volume2, Zap, Timer, Pencil, XCircle,
   Map, ExternalLink, HelpCircle, FileDown, ChevronRight, Flag, Image as ImageIcon, 
-  Paperclip, Users, Settings, Package, ShoppingBag, ArrowRight, LayoutDashboard, Phone, Calendar
+  Paperclip, Users, Settings, Package, ShoppingBag, ArrowRight, LayoutDashboard, Phone, Calendar,
+  Tags
 } from 'lucide-react';
+
+// --- IMPORTACIÓN DINÁMICA DEL MAPA ---
+const LocationMap = dynamic(() => import('@/app/components/LocationMap'), { 
+  ssr: false,
+  loading: () => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 text-white backdrop-blur-sm"><Loader2 className="animate-spin mr-2"/> Cargando mapa...</div>
+});
 
 // --- TIPOS ---
 interface Producto {
@@ -83,7 +91,7 @@ const StatCard = ({ title, value, icon, color, subtext }: { title: string, value
   </motion.div>
 );
 
-// --- TOUR GUIDE (ACTUALIZADO PARA EXPLICAR TODO) ---
+// --- TOUR GUIDE MEJORADO ---
 const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
     const [step, setStep] = useState(0);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
@@ -92,30 +100,52 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
     const steps = [
         { 
             title: "Bienvenido al Panel Jefe", 
-            desc: "Este es el centro de control de tu bodega. Vamos a repasar las secciones clave.",
+            desc: "Este es el centro de control. Vamos a enseñarte a gestionar tu bodega como un profesional.",
             targetId: null 
         },
         { 
             title: "1. Resumen (Dashboard)", 
-            desc: "Aquí verás tus métricas clave: Ventas del día, pedidos pendientes y alertas de stock bajo.",
+            desc: "Aquí verás tus ventas del día y alertas de stock.",
             targetId: 'nav-dashboard',
             mobileId: 'nav-dashboard-mobile'
         },
         { 
             title: "2. Gestión de Pedidos", 
-            desc: "Donde ocurre la magia. Recibe órdenes en tiempo real, verifica pagos Yape y despacha productos.",
+            desc: "Recibe y atiende los pedidos de tus clientes en tiempo real.",
             targetId: 'nav-orders',
             mobileId: 'nav-orders-mobile'
         },
         { 
             title: "3. Inventario", 
-            desc: "Control total de productos. Agrega, edita precios, crea ofertas flash y sube stock masivamente con Excel.",
+            desc: "Aquí es donde agregas y editas tus productos.",
             targetId: 'nav-inventory',
             mobileId: 'nav-inventory-mobile'
         },
+        // --- PASOS DETALLADOS DEL INVENTARIO ---
+        {
+            title: "Formulario de Producto",
+            desc: "En este panel izquierdo controlas los datos. Empieza escribiendo el nombre, precio y stock.",
+            targetId: 'tour-form-basic'
+        },
+        {
+            title: "Ofertas Flash",
+            desc: "Activa esta casilla para crear promociones temporales. Se mostrarán destacadas en la App del cliente.",
+            targetId: 'tour-form-offer'
+        },
+        {
+            title: "Imagen del Producto",
+            desc: "Sube una foto atractiva. Si no tienes una, se usará una imagen por defecto, pero te recomendamos subir una real.",
+            targetId: 'tour-form-image'
+        },
+        {
+            title: "Carga Masiva (Excel)",
+            desc: "Si tienes cientos de productos, no los subas uno por uno. Descarga la plantilla, llénala y súbela aquí.",
+            targetId: 'tour-excel-actions'
+        },
+        // ---------------------------------------------
         { 
             title: "4. Base de Clientes", 
-            desc: "Conoce a tus compradores. Visualiza quiénes son, su número de contacto y cuánto te compran.",
+            desc: "Visualiza quiénes son tus mejores compradores y su historial.",
             targetId: 'nav-customers',
             mobileId: 'nav-customers-mobile'
         }
@@ -133,15 +163,17 @@ const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
         if (el) {
             const rect = el.getBoundingClientRect();
             setTargetRect(rect);
-            const isSidebar = rect.height > window.innerHeight * 0.8 || rect.left < 100; // Detectar sidebar izquierda
+            const isSidebar = rect.height > window.innerHeight * 0.8 || rect.left < 100; 
             
             if (isSidebar) {
-                // Sidebar: Poner a la derecha
                 setTooltipStyle({ top: `${rect.top}px`, left: `${rect.right + 20}px` });
             } else {
-                // Elemento normal
+                const spaceBelow = window.innerHeight - rect.bottom;
+                const showBelow = spaceBelow > 250;
                 setTooltipStyle({
-                    top: `${rect.bottom + 20}px`, left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '350px'
+                    top: showBelow ? `${rect.bottom + 20}px` : 'auto',
+                    bottom: !showBelow ? `${window.innerHeight - rect.top + 20}px` : 'auto',
+                    left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '350px'
                 });
             }
         } else {
@@ -454,11 +486,10 @@ export default function AdminDashboard() {
   const pendientes = orders.filter(o => o.estado === 'pendiente').length;
   const lowStock = products.filter(p => p.stock < 5).length;
   
-  // --- LOGICA DE CLIENTES (Calculada desde Pedidos para mostrar historial real) ---
+  // --- LOGICA DE CLIENTES ---
   const uniqueCustomers = Array.from(new Set(orders.map(o => o.cliente_nombre)))
     .map(name => {
         const customerOrders = orders.filter(o => o.cliente_nombre === name);
-        // Ordenar por fecha para obtener la última
         const sortedOrders = customerOrders.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         return {
             name,
@@ -468,20 +499,33 @@ export default function AdminDashboard() {
             lastOrder: sortedOrders[0].created_at
         }
     })
-    .sort((a,b) => b.totalSpent - a.totalSpent); // Ordenar por mejores clientes
+    .sort((a,b) => b.totalSpent - a.totalSpent);
 
   const filteredCustomers = uniqueCustomers.filter(c => 
-     c.name.toLowerCase().includes(customerSearch.toLowerCase()) || 
-     c.phone.includes(customerSearch)
+      c.name.toLowerCase().includes(customerSearch.toLowerCase()) || 
+      c.phone.includes(customerSearch)
   );
 
-  // Helper para color de avatar aleatorio pero consistente
   const getAvatarColor = (name: string) => {
     const colors = ['bg-red-100 text-red-600', 'bg-blue-100 text-blue-600', 'bg-green-100 text-green-600', 'bg-yellow-100 text-yellow-600', 'bg-purple-100 text-purple-600', 'bg-pink-100 text-pink-600'];
     let hash = 0;
     for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
   };
+
+  // --- LÓGICA DE AGRUPACIÓN DE INVENTARIO ---
+  const getGroupedProducts = () => {
+      const filtered = products.filter(p => p.nombre.toLowerCase().includes(productSearch.toLowerCase()));
+      const groups: Record<string, Producto[]> = {};
+      
+      filtered.forEach(p => {
+          const cat = p.categoria || 'Otros';
+          if (!groups[cat]) groups[cat] = [];
+          groups[cat].push(p);
+      });
+      return groups;
+  };
+  const groupedProducts = getGroupedProducts();
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex selection:bg-orange-200">
@@ -536,7 +580,7 @@ export default function AdminDashboard() {
       </AnimatePresence>
 
       {/* --- CONTENIDO PRINCIPAL --- */}
-      <main className="flex-1 lg:ml-64 p-4 sm:p-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 lg:ml-64 p-4 sm:p-8 max-w-[1920px] mx-auto w-full">
          {/* Top Bar Mobile */}
          <div className="lg:hidden flex items-center justify-between mb-6">
              <div className="flex items-center gap-3">
@@ -576,10 +620,10 @@ export default function AdminDashboard() {
                             <tbody className="divide-y divide-gray-50">
                                 {orders.slice(0, 5).map(o => (
                                     <tr key={o.id} className="group hover:bg-gray-50 transition cursor-pointer" onClick={() => {setSelectedOrder(o); setCurrentView('orders')}}>
-                                        <td className="py-3 font-medium">#{o.id}</td>
-                                        <td className="py-3">{o.cliente_nombre}</td>
-                                        <td className="py-3 font-bold">S/ {o.total.toFixed(2)}</td>
-                                        <td className="py-3"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${o.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' : o.estado === 'pagado' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>{o.estado}</span></td>
+                                            <td className="py-3 font-medium">#{o.id}</td>
+                                            <td className="py-3">{o.cliente_nombre}</td>
+                                            <td className="py-3 font-bold">S/ {o.total.toFixed(2)}</td>
+                                            <td className="py-3"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${o.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' : o.estado === 'pagado' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>{o.estado}</span></td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -643,46 +687,44 @@ export default function AdminDashboard() {
              </div>
          )}
 
-         {/* Vista: Inventario */}
+         {/* Vista: Inventario (MODIFICADA: 2 Columnas MAX para mejor visibilidad) */}
          {currentView === 'inventory' && (
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4">
+             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-4">
                  <div className="lg:col-span-1" ref={formTopRef}>
                      <div className={`bg-white p-6 rounded-3xl shadow-sm border sticky top-24 transition-colors ${editingId ? 'border-orange-300 ring-4 ring-orange-50' : 'border-gray-100'}`}>
                          <h2 className="text-lg font-black flex items-center gap-2 mb-4">{editingId ? <Pencil className="w-5 h-5 text-orange-600"/> : <Plus className="w-5 h-5 text-orange-500"/>} {editingId ? "Editar Producto" : "Nuevo Producto"}</h2>
                          <form onSubmit={handleSaveProduct} className="space-y-4">
-                             <div className="space-y-1">
+                             <div className="space-y-1" id="tour-form-basic">
                                  <label className="text-[10px] uppercase font-bold text-gray-400">Nombre</label>
-                                 <input type="text" value={newProduct.nombre} onChange={e => setNewProduct({...newProduct, nombre: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 transition-all font-medium" />
+                                 <input type="text" id="tour-product-name" value={newProduct.nombre} onChange={e => setNewProduct({...newProduct, nombre: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 transition-all font-medium" />
                              </div>
                              <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
                                     <label className="text-[10px] uppercase font-bold text-gray-400">Precio</label>
-                                    <input type="number" step="0.10" value={newProduct.precio} onChange={e => setNewProduct({...newProduct, precio: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" />
+                                    <input type="number" step="0.10" id="tour-product-price" value={newProduct.precio} onChange={e => setNewProduct({...newProduct, precio: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] uppercase font-bold text-gray-400">Stock</label>
-                                    <input type="number" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" />
+                                    <input type="number" id="tour-product-stock" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium" />
                                 </div>
                              </div>
-                             {/* Ofertas */}
-                             <div className={`border rounded-xl p-4 transition-all ${newProduct.oferta_activa ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-100'}`}>
+                             <div id="tour-form-offer" className={`border rounded-xl p-4 transition-all ${newProduct.oferta_activa ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-100'}`}>
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="flex items-center gap-2 text-xs font-bold uppercase text-gray-600 cursor-pointer select-none"><Zap className={`w-4 h-4 ${newProduct.oferta_activa ? 'text-orange-500 fill-orange-500' : 'text-gray-400'}`} /> Oferta Flash</label>
                                     <div onClick={() => setNewProduct({...newProduct, oferta_activa: !newProduct.oferta_activa})} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${newProduct.oferta_activa ? 'bg-orange-500' : 'bg-gray-300'}`}>
-                                        <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${newProduct.oferta_activa ? 'translate-x-4' : 'translate-x-0'}`} />
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${newProduct.oferta_activa ? 'translate-x-4' : 'translate-x-0'}`} />
                                     </div>
                                 </div>
                                 {newProduct.oferta_activa && (
                                     <motion.div initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: 'auto'}} className="space-y-3 pt-2">
-                                        <input type="number" step="0.10" placeholder="Precio Oferta" value={newProduct.precio_oferta} onChange={e => setNewProduct({...newProduct, precio_oferta: e.target.value})} className="w-full p-2 bg-white border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm font-bold text-orange-600" />
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <input type="time" value={newProduct.hora_inicio} onChange={e => setNewProduct({...newProduct, hora_inicio: e.target.value})} className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs" />
-                                            <input type="time" value={newProduct.hora_fin} onChange={e => setNewProduct({...newProduct, hora_fin: e.target.value})} className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs" />
-                                        </div>
+                                            <input type="number" step="0.10" placeholder="Precio Oferta" value={newProduct.precio_oferta} onChange={e => setNewProduct({...newProduct, precio_oferta: e.target.value})} className="w-full p-2 bg-white border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm font-bold text-orange-600" />
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input type="time" value={newProduct.hora_inicio} onChange={e => setNewProduct({...newProduct, hora_inicio: e.target.value})} className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs" />
+                                                <input type="time" value={newProduct.hora_fin} onChange={e => setNewProduct({...newProduct, hora_fin: e.target.value})} className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs" />
+                                            </div>
                                     </motion.div>
                                 )}
                              </div>
-                             {/* Categoría e Imagen */}
                              <div className="space-y-1">
                                  <label className="text-[10px] uppercase font-bold text-gray-400">Categoría</label>
                                  <select value={newProduct.categoria} onChange={e => setNewProduct({...newProduct, categoria: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium">
@@ -690,7 +732,7 @@ export default function AdminDashboard() {
                                      {CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                  </select>
                              </div>
-                             <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-200 p-6 rounded-xl text-center cursor-pointer hover:bg-orange-50 hover:border-orange-200 transition-all group">
+                             <div id="tour-form-image" onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-200 p-6 rounded-xl text-center cursor-pointer hover:bg-orange-50 hover:border-orange-200 transition-all group">
                                 {uploadingImage ? <Loader2 className="animate-spin mx-auto text-orange-500"/> : (newProduct.imagen_url ? <img src={newProduct.imagen_url} className="h-24 w-full object-contain rounded-lg"/> : <div className="text-gray-400 text-sm font-medium group-hover:text-orange-500"><Upload className="w-6 h-6 mx-auto mb-2"/>Subir Foto</div>)}
                              </div>
                              <input type="file" ref={fileInputRef} hidden onChange={handleImageUpload} />
@@ -702,46 +744,68 @@ export default function AdminDashboard() {
                          </form>
                          
                          {!editingId && (
-                             <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-2 gap-2">
+                             <div id="tour-excel-actions" className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-2 gap-2">
                                  <button onClick={handleDownloadTemplate} className="bg-white border border-gray-200 text-gray-600 font-bold py-2 rounded-xl text-xs hover:bg-gray-50 flex items-center justify-center gap-1"><FileDown size={14}/> Plantilla</button>
-                                 <button onClick={() => excelInputRef.current?.click()} className="bg-green-50 border border-green-200 text-green-700 font-bold py-2 rounded-xl text-xs hover:bg-green-100 flex items-center justify-center gap-1"><FileSpreadsheet size={14}/> Importar Excel</button>
+                                 <button id="tour-excel-btn" onClick={() => excelInputRef.current?.click()} className="bg-green-50 border border-green-200 text-green-700 font-bold py-2 rounded-xl text-xs hover:bg-green-100 flex items-center justify-center gap-1"><FileSpreadsheet size={14}/> Importar Excel</button>
                                  <input type="file" ref={excelInputRef} hidden accept=".xlsx" onChange={handleExcelUpload} />
                              </div>
                          )}
                      </div>
                  </div>
 
-                 <div className="lg:col-span-2 space-y-4">
+                 <div className="lg:col-span-3 space-y-6">
                      <div className="relative">
                         <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
                         <input type="text" placeholder="Buscar producto..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl w-full text-sm focus:ring-2 focus:ring-orange-500 outline-none shadow-sm"/>
                      </div>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <AnimatePresence>
-                        {products.filter(p => p.nombre.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
-                            <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`bg-white p-3 rounded-2xl border flex gap-4 relative group hover:shadow-md transition-all ${editingId === p.id ? 'border-orange-400 ring-2 ring-orange-100' : 'border-gray-100 hover:border-orange-200'}`}>
-                                <div className="w-20 h-20 bg-gray-50 rounded-xl flex-shrink-0 relative overflow-hidden">
-                                    <img src={p.imagen_url} className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} />
-                                    {p.oferta_activa && <div className="absolute top-0 left-0 bg-orange-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-br-lg z-10">OFERTA</div>}
-                                </div>
-                                <div className="flex-1 py-1">
-                                    <h4 className="font-bold text-gray-900 line-clamp-1 text-sm">{p.nombre}</h4>
-                                    <p className="text-xs text-gray-500 font-medium mb-1">{p.categoria}</p>
-                                    <div className="flex justify-between items-end mt-2">
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>Stock: {p.stock}</span>
-                                        <div className="text-right">
-                                            {p.oferta_activa ? <><span className="block text-[10px] text-gray-400 line-through">S/ {p.precio.toFixed(2)}</span><span className="font-black text-orange-600 text-sm">S/ {p.precio_oferta?.toFixed(2)}</span></> : <span className="font-black text-gray-900 text-sm">S/ {p.precio.toFixed(2)}</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleEditClick(p)} className="p-1.5 bg-white border border-gray-200 rounded-lg hover:text-orange-600 hover:border-orange-200"><Pencil size={14}/></button>
-                                    <button onClick={() => handleDeleteProduct(p.id)} className="p-1.5 bg-white border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-200"><Trash2 size={14}/></button>
-                                </div>
-                            </motion.div>
-                        ))}
-                        </AnimatePresence>
+                     
+                     {/* AQUÍ ESTÁ EL CAMBIO: GRID DE 2 COLUMNAS (1 columna en movil) */}
+                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                       {Object.entries(groupedProducts).map(([categoria, prods]) => {
+                           if (prods.length === 0) return null;
+                           return (
+                              <div key={categoria} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-full">
+                                  <div className="flex items-center gap-3 mb-4 pb-2 border-b border-gray-50">
+                                      <div className="bg-orange-100 p-2 rounded-lg text-orange-600"><Tags className="w-5 h-5"/></div>
+                                      <h3 className="font-black text-gray-900 text-xl uppercase tracking-tight">{categoria} <span className="text-gray-400 text-sm font-medium ml-2">({prods.length})</span></h3>
+                                  </div>
+                                  
+                                  <div className="flex-1 space-y-3 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
+                                      <AnimatePresence>
+                                      {prods.map(p => (
+                                          <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`flex items-center gap-4 p-3 rounded-2xl border transition-all cursor-pointer hover:shadow-md ${editingId === p.id ? 'border-orange-400 bg-orange-50' : 'border-gray-100 bg-gray-50 hover:bg-white'}`}>
+                                              <div className="w-14 h-14 bg-white rounded-xl flex-shrink-0 relative overflow-hidden border border-gray-200">
+                                                  <img src={p.imagen_url} className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} />
+                                                  {p.oferta_activa && <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center"><Zap className="w-4 h-4 text-white drop-shadow-sm"/></div>}
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                  <h4 className="font-bold text-gray-900 text-base truncate" title={p.nombre}>{p.nombre}</h4>
+                                                  <div className="flex justify-between items-end mt-1">
+                                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-600'}`}>Stock: {p.stock}</span>
+                                                      <div className="text-right">
+                                                          {p.oferta_activa ? <><span className="block text-[10px] text-gray-400 line-through">S/ {p.precio.toFixed(2)}</span><span className="font-black text-orange-600 text-base">S/ {p.precio_oferta?.toFixed(2)}</span></> : <span className="font-black text-gray-900 text-base">S/ {p.precio.toFixed(2)}</span>}
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                              <div className="flex flex-col gap-2">
+                                                  <button onClick={() => handleEditClick(p)} className="p-2 bg-white border border-gray-200 rounded-lg hover:text-orange-600 hover:border-orange-300 transition-colors"><Pencil size={16}/></button>
+                                                  <button onClick={() => handleDeleteProduct(p.id)} className="p-2 bg-white border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-300 transition-colors"><Trash2 size={16}/></button>
+                                              </div>
+                                          </motion.div>
+                                      ))}
+                                      </AnimatePresence>
+                                  </div>
+                              </div>
+                           );
+                       })}
                      </div>
+
+                     {Object.keys(groupedProducts).length === 0 && (
+                         <div className="text-center py-20 opacity-50">
+                             <Package className="w-20 h-20 mx-auto mb-4 text-gray-300"/>
+                             <p className="text-lg">No hay productos que coincidan.</p>
+                         </div>
+                     )}
                  </div>
              </div>
          )}
