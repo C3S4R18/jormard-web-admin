@@ -12,7 +12,7 @@ import {
   TrendingUp, Copy, Bell, LogOut, Volume2, Zap, Timer, Pencil, XCircle,
   Map, ExternalLink, HelpCircle, FileDown, ChevronRight, Flag, Image as ImageIcon, 
   Paperclip, Users, Settings, Package, ShoppingBag, ArrowRight, LayoutDashboard, Phone, Calendar,
-  Tags, Bot, MessageSquare, Sparkles, Trophy
+  Tags, Bot, MessageSquare, Sparkles, Trophy, Download, FileUp
 } from 'lucide-react';
 
 // --- IMPORTACIÓN DINÁMICA DEL MAPA ---
@@ -68,7 +68,7 @@ const CATEGORIAS = [
 const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) => (
   <motion.div 
     initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.9 }}
-    className={`fixed bottom-10 right-10 z-[100] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md border ${
+    className={`fixed bottom-10 right-10 z-[100] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md border ${
       type === 'success' ? 'bg-slate-900 text-white border-slate-700' : 'bg-red-600 text-white border-red-500'
     }`}
   >
@@ -295,8 +295,8 @@ const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () 
             view: 'inventory'
         },
         {
-            title: "Carga Masiva",
-            desc: "¿Tienes muchos productos? Usa Excel. Descarga la plantilla aquí y súbela llena.",
+            title: "Carga Masiva (Excel)",
+            desc: "Si tienes cientos de productos, no los subas uno por uno. Descarga la plantilla, llénala y súbela aquí.",
             targetId: 'tour-excel-actions',
             view: 'inventory'
         },
@@ -326,7 +326,7 @@ const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () 
     // Calcular posición del tooltip
     const updatePosition = () => {
         const currentStep = steps[step];
-        let el: HTMLElement | null = null; // TIPADO CORREGIDO AQUÍ
+        let el: HTMLElement | null = null; 
         
         // Esperar un poco a que la vista cambie y el DOM se renderice
         setTimeout(() => {
@@ -624,6 +624,32 @@ export default function AdminDashboard() {
     XLSX.utils.book_append_sheet(wb, ws, "Plantilla Productos");
     XLSX.writeFile(wb, "Plantilla_Carga_Masiva.xlsx");
     showToast("Plantilla descargada", 'success');
+  };
+
+  // --- NUEVA FUNCIÓN: EXPORTAR INVENTARIO COMPLETO ---
+  const handleExportInventory = () => {
+    if (products.length === 0) return showToast("No hay productos para exportar", 'error');
+
+    // 1. Mapear productos al formato de Excel (Compatible con la importación)
+    const dataToExport = products.map(p => ({
+        Nombre: p.nombre,
+        Precio: p.precio,
+        Stock: p.stock,
+        Categoria: p.categoria,
+        Imagen: p.imagen_url || '',
+        // Opcional: Incluir datos de oferta si quieres guardarlos
+        Oferta_Activa: p.oferta_activa ? "SI" : "NO",
+        Precio_Oferta: p.precio_oferta || 0
+    }));
+
+    // 2. Crear hoja de cálculo
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario Completo");
+
+    // 3. Descargar archivo
+    XLSX.writeFile(wb, `Inventario_Jormard_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast("Inventario exportado correctamente", 'success');
   };
 
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -953,8 +979,10 @@ export default function AdminDashboard() {
                          {!editingId && (
                              <div id="tour-excel-actions" className="mt-8 pt-6 border-t border-slate-100 grid grid-cols-2 gap-3">
                                  <button onClick={handleDownloadTemplate} className="bg-white border-2 border-slate-100 text-slate-600 font-bold py-3 rounded-xl text-xs hover:border-slate-300 flex items-center justify-center gap-2"><FileDown size={16}/> Plantilla</button>
-                                 <button id="tour-excel-btn" onClick={() => excelInputRef.current?.click()} className="bg-green-50 border-2 border-green-100 text-green-700 font-bold py-3 rounded-xl text-xs hover:bg-green-100 flex items-center justify-center gap-2"><FileSpreadsheet size={16}/> Carga Masiva</button>
+                                 <button id="tour-excel-btn" onClick={() => excelInputRef.current?.click()} className="bg-green-50 border-2 border-green-100 text-green-700 font-bold py-3 rounded-xl text-xs hover:bg-green-100 flex items-center justify-center gap-2"><FileUp size={16}/> Importar</button>
                                  <input type="file" ref={excelInputRef} hidden accept=".xlsx" onChange={handleExcelUpload} />
+                                 {/* BOTÓN EXPORTAR INVENTARIO */}
+                                 <button onClick={handleExportInventory} className="col-span-2 bg-indigo-50 border-2 border-indigo-100 text-indigo-700 font-bold py-3 rounded-xl text-xs hover:bg-indigo-100 flex items-center justify-center gap-2"><Download size={16}/> Exportar Todo</button>
                              </div>
                          )}
                      </div>
