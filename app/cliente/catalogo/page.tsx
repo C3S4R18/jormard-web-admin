@@ -11,13 +11,13 @@ import {
   Clock, Package, Loader2, Zap, LocateFixed, Map as MapIcon,
   Image as ImageIcon, ChevronDown, ChevronUp, Banknote, Smartphone, 
   Upload, MessageCircle, Copy, Menu, User, Settings, HelpCircle, Info, Camera, Edit2, PlayCircle,
-  ChevronLeft, ChevronRight, Heart, Home
+  ChevronLeft, ChevronRight, Heart, Home, Star, LayoutGrid, Trophy, Flag, Check
 } from 'lucide-react';
 
 // --- IMPORTACIÓN DINÁMICA DEL MAPA ---
 const LocationMap = dynamic(() => import('@/app/components/LocationMap'), { 
   ssr: false,
-  loading: () => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 text-white backdrop-blur-sm"><Loader2 className="animate-spin mr-2"/> Cargando mapa...</div>
+  loading: () => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 text-white backdrop-blur-md"><div className="flex flex-col items-center"><Loader2 className="animate-spin mr-2 w-10 h-10"/><p className="mt-2 font-bold">Cargando mapa...</p></div></div>
 });
 
 // --- TIPOS ---
@@ -69,278 +69,299 @@ const isOfferActive = (prod: Producto): boolean => {
   return currentMinutes >= (startH * 60 + startM) && currentMinutes <= (endH * 60 + endM);
 };
 
-// --- COMPONENTE TOAST ---
+// --- COMPONENTE TOAST ANIMADO ---
 const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 'error' | 'offer', onClose: () => void }) => (
   <motion.div 
-    initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.9 }}
-    className={`fixed bottom-20 left-1/2 -translate-x-1/2 md:bottom-10 md:left-10 md:translate-x-0 z-[70] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md border ${
-      type === 'success' ? 'bg-gray-900/90 text-white border-gray-800' : 
-      type === 'offer' ? 'bg-orange-600/90 text-white border-orange-500' :
-      'bg-red-500/90 text-white border-red-400'
+    initial={{ opacity: 0, y: 50, scale: 0.9 }} 
+    animate={{ opacity: 1, y: 0, scale: 1 }} 
+    exit={{ opacity: 0, y: 20, scale: 0.9 }}
+    className={`fixed bottom-24 left-1/2 -translate-x-1/2 md:bottom-10 md:left-10 md:translate-x-0 z-[100] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 backdrop-blur-xl border ${
+      type === 'success' ? 'bg-slate-900/95 text-white border-slate-800' : 
+      type === 'offer' ? 'bg-orange-600/95 text-white border-orange-500' :
+      'bg-red-500/95 text-white border-red-400'
     }`}
   >
-    {type === 'success' ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : type === 'offer' ? <Zap className="w-5 h-5 text-yellow-300 fill-yellow-300 animate-pulse" /> : <X className="w-5 h-5" />}
-    <span className="font-bold text-sm">{message}</span>
+    <div className={`p-2 rounded-full ${type === 'success' ? 'bg-green-500/20' : type === 'offer' ? 'bg-yellow-400/20' : 'bg-red-900/20'}`}>
+        {type === 'success' ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : type === 'offer' ? <Zap className="w-5 h-5 text-yellow-300 fill-yellow-300 animate-pulse" /> : <X className="w-5 h-5" />}
+    </div>
+    <span className="font-bold text-sm tracking-wide">{message}</span>
   </motion.div>
 );
 
-// --- COMPONENTE TOUR GUIDE MEJORADO ---
-const TourGuide = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+// --- COMPONENTE CONFETI ---
+const Confetti = () => {
+    const colors = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
+    return (
+        <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
+            {[...Array(50)].map((_, i) => (
+                <motion.div
+                    key={i}
+                    initial={{ y: -20, x: Math.random() * 100 + 'vw', opacity: 1, rotate: 0 }}
+                    animate={{ y: '100vh', x: (Math.random() - 0.5) * 200 + 'px', opacity: 0, rotate: 360 }}
+                    transition={{ duration: Math.random() * 2 + 2, delay: Math.random() * 0.5, ease: 'linear' }}
+                    className="absolute w-3 h-3 rounded-sm"
+                    style={{ backgroundColor: colors[i % colors.length] }}
+                />
+            ))}
+        </div>
+    );
+};
+
+// --- COMPONENTE TOUR GUIDE (CORREGIDO TIPOS) ---
+const TourGuide = ({ isOpen, onClose, setCurrentView, setIsCartOpen }: { 
+    isOpen: boolean; 
+    onClose: () => void;
+    // Aquí definimos los tipos que faltaban para arreglar el error TS2322
+    setCurrentView: (view: any) => void;
+    setIsCartOpen: (open: boolean) => void;
+}) => {
     const [step, setStep] = useState(0);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
+    const [showConfetti, setShowConfetti] = useState(false);
 
     const steps = [
         { 
-            title: "¡Bienvenido a Bodega Jormard!", 
-            desc: "Tu panel de compras inteligente. Vamos a dar un recorrido rápido por las funciones principales.",
-            targetId: null 
+            title: "👋 ¡Bienvenido querido usuario!", 
+            desc: "Te presento tu nueva Bodega Digital. Vamos a dar un paseo rápido.",
+            targetId: null,
+            view: 'store'
         },
         { 
-            title: "Buscador Inteligente", 
-            desc: "Escribe aquí para encontrar rápidamente bebidas, snacks o cualquier producto.",
+            title: "🔍 Buscador Inteligente", 
+            desc: "Escribe aquí para encontrar tus antojos al instante. ¡Es súper rápido!",
             targetId: 'tour-search',
-            mobileId: 'tour-search-mobile'
+            mobileId: 'tour-search-mobile',
+            view: 'store'
         },
         { 
-            title: "Filtra por Categorías", 
-            desc: "Usa estas etiquetas para ver solo lo que te interesa con un clic.",
+            title: "🏷️ Categorías", 
+            desc: "Navega rápidamente entre nuestras secciones.",
             targetId: 'tour-categories',
-            mobileId: 'tour-categories' 
+            mobileId: 'tour-categories',
+            view: 'store' 
         },
         { 
-            title: "Tienda Principal", 
-            desc: "Aquí siempre encontrarás el catálogo completo de productos.",
-            targetId: 'nav-store', 
-            mobileId: 'nav-store-mobile'
-        },
-        { 
-            title: "Tus Favoritos", 
-            desc: "Guarda los productos que más compras para acceder a ellos rápidamente.",
+            title: "❤️ Favoritos", 
+            desc: "Guarda los productos que más compras.",
             targetId: 'nav-favorites', 
-            mobileId: 'nav-favorites-mobile'
+            mobileId: 'nav-favorites-mobile',
+            view: 'favorites' 
         },
         { 
-            title: "Historial de Pedidos", 
-            desc: "Revisa el estado de tus compras (Pendiente, En Camino, Entregado) en tiempo real.",
+            title: "📦 Pedidos", 
+            desc: "Revisa el estado de tus compras en tiempo real.",
             targetId: 'nav-orders', 
-            mobileId: 'nav-orders-mobile'
+            mobileId: 'nav-orders-mobile',
+            view: 'orders' 
         },
         { 
-            title: "Tu Perfil", 
-            desc: "Actualiza tu foto, nombre y teléfono de contacto aquí.",
+            title: "👤 Perfil", 
+            desc: "Mantén tus datos y foto actualizados.",
             targetId: 'nav-profile', 
-            mobileId: 'nav-profile-mobile'
+            mobileId: 'nav-profile-mobile',
+            view: 'profile' 
         },
         { 
-            title: "Configuración", 
-            desc: "Controla las notificaciones, sonidos y limpia la memoria de la app.",
-            targetId: 'nav-settings', 
-            mobileId: 'nav-settings-mobile'
-        },
-        { 
-            title: "Ayuda y Soporte", 
-            desc: "¿Dudas? Contáctanos por WhatsApp o revisa las preguntas frecuentes.",
-            targetId: 'nav-support', 
-            mobileId: 'nav-support-mobile'
-        },
-        { 
-            title: "Tu Canasta", 
-            desc: "Aquí verás el total a pagar y podrás finalizar tu compra.",
+            title: "🛒 Tu Canasta", 
+            desc: "Aquí verás el total a pagar. ¡Vamos a abrirla!",
             targetId: 'tour-cart',
-            mobileId: 'tour-cart-mobile' 
+            mobileId: 'tour-cart-mobile',
+            view: 'store', 
+            action: () => setIsCartOpen(true) 
+        },
+        { 
+            title: "🎉 ¡Todo Listo!", 
+            desc: "Ya eres un experto. ¡Disfruta comprando!",
+            targetId: null,
+            view: 'store'
         }
     ];
+
+    // Efecto para cambiar vista y ejecutar acciones
+    useEffect(() => {
+        const currentStepConfig = steps[step];
+        if (currentStepConfig.view) {
+            setCurrentView(currentStepConfig.view);
+        }
+        if (currentStepConfig.action) {
+            setTimeout(() => currentStepConfig.action && currentStepConfig.action(), 300);
+        } else {
+             if(step !== 6) setIsCartOpen(false);
+        }
+    }, [step]);
 
     const updatePosition = () => {
         const currentStep = steps[step];
         let el = null;
         
-        // Prioridad: ID Desktop -> Si está oculto, buscar ID Mobile -> Si no existe Desktop, buscar Mobile
         if (currentStep.targetId) {
             el = document.getElementById(currentStep.targetId);
-            // Si existe pero está oculto (display none en móvil), buscar la versión mobile
             if (el && window.getComputedStyle(el).display === 'none' && currentStep.mobileId) {
                 el = document.getElementById(currentStep.mobileId);
             }
         }
-        if (!el && currentStep.mobileId) {
-             el = document.getElementById(currentStep.mobileId);
-        }
+        if (!el && currentStep.mobileId) el = document.getElementById(currentStep.mobileId);
 
         if (el) {
             const rect = el.getBoundingClientRect();
             setTargetRect(rect);
-            
-            // Detectar si es un elemento del Sidebar (izquierda)
             const isSidebar = rect.left < 300 && rect.width > 150; 
             
             if (isSidebar) {
                 setTooltipStyle({
                     top: `${rect.top}px`,
-                    left: `${rect.right + 20}px`, // Mostrar a la derecha del botón
+                    left: `${rect.right + 20}px`,
                     transform: 'translateY(-10%)',
                     width: '300px'
                 });
             } else {
-                // Lógica estándar (Arriba/Abajo)
                 const spaceBelow = window.innerHeight - rect.bottom;
                 const showBelow = spaceBelow > 250;
-
                 setTooltipStyle({
-                    top: showBelow ? `${rect.bottom + 15}px` : 'auto',
-                    bottom: !showBelow ? `${window.innerHeight - rect.top + 15}px` : 'auto',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '90%',
-                    maxWidth: '350px'
+                    top: showBelow ? `${rect.bottom + 20}px` : 'auto',
+                    bottom: !showBelow ? `${window.innerHeight - rect.top + 20}px` : 'auto',
+                    left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '350px'
                 });
             }
         } else {
-            // Centrado si no hay target (Paso 1)
             setTargetRect(null);
-            setTooltipStyle({
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '90%',
-                maxWidth: '400px'
-            });
+            setTooltipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: '400px' });
         }
     };
 
     useLayoutEffect(() => {
         if (isOpen) {
-            const timer = setTimeout(updatePosition, 100);
+            const timer = setTimeout(updatePosition, 400); 
             window.addEventListener('resize', updatePosition);
-            return () => {
-                window.removeEventListener('resize', updatePosition);
-                clearTimeout(timer);
-            }
+            return () => { window.removeEventListener('resize', updatePosition); clearTimeout(timer); }
         }
     }, [step, isOpen]);
 
-    const handleNext = () => {
-        if (step < steps.length - 1) setStep(step + 1);
-        else onClose();
+    const handleNext = () => { 
+        if (step < steps.length - 1) {
+            setStep(step + 1); 
+        } else {
+            setShowConfetti(true);
+            setTimeout(() => { onClose(); setShowConfetti(false); }, 4000);
+        }
     };
 
-    if (!isOpen) return null;
+    if (!isOpen && !showConfetti) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] overflow-hidden">
-            <motion.div 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                className="absolute inset-0 transition-all duration-500 ease-in-out"
-                style={{
-                    background: 'rgba(0,0,0,0.7)',
-                    clipPath: targetRect 
-                        ? `polygon(0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%, ${targetRect.left}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.top}px)`
-                        : undefined
-                }}
-            />
-
-            {targetRect && (
-                <motion.div
-                    layoutId="tour-ring"
-                    className="absolute border-2 border-orange-500 rounded-xl shadow-[0_0_20px_rgba(249,115,22,0.6)]"
+        <>
+            {showConfetti && <Confetti />}
+            {isOpen && (
+            <div className="fixed inset-0 z-[100] overflow-hidden font-sans">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 transition-all duration-500 ease-in-out"
                     style={{
-                        top: targetRect.top - 4,
-                        left: targetRect.left - 4,
-                        width: targetRect.width + 8,
-                        height: targetRect.height + 8,
-                        borderRadius: steps[step].targetId?.includes('nav') ? '12px' : '12px'
+                        background: 'rgba(0,0,0,0.7)',
+                        backdropFilter: 'blur(3px)',
+                        clipPath: targetRect ? `polygon(0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%, ${targetRect.left}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.top}px, ${targetRect.right}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.bottom}px, ${targetRect.left}px ${targetRect.top}px)` : undefined
                     }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 />
-            )}
-
-            <motion.div 
-                key={step}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="absolute bg-white p-6 rounded-3xl shadow-2xl z-[101]"
-                style={tooltipStyle}
-            >
-                <div className="flex justify-between items-start mb-4">
-                    <div className="bg-orange-100 p-2 rounded-full text-orange-600">
-                        {step === 0 ? <Store size={24}/> : <Info size={24}/>}
+                {targetRect && (
+                    <motion.div layoutId="tour-ring" className="absolute border-4 border-indigo-500 rounded-xl shadow-[0_0_30px_rgba(99,102,241,0.6)]"
+                        style={{ top: targetRect.top - 8, left: targetRect.left - 8, width: targetRect.width + 16, height: targetRect.height + 16, borderRadius: '16px' }}
+                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    />
+                )}
+                <motion.div key={step} initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute bg-white p-6 rounded-3xl shadow-2xl z-[101] border border-slate-100" style={tooltipStyle}>
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="bg-indigo-100 p-2.5 rounded-2xl text-indigo-600 shadow-sm">
+                            {step === steps.length - 1 ? <Trophy size={24}/> : <Flag size={24}/>}
+                        </div>
+                        <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{step + 1} / {steps.length}</span>
                     </div>
-                    <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-md">{step + 1} / {steps.length}</span>
-                </div>
-                <h3 className="text-xl font-black text-gray-900 mb-2">{steps[step].title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed mb-6">{steps[step].desc}</p>
-                
-                <div className="flex justify-between items-center">
-                    <button onClick={onClose} className="text-gray-400 font-bold text-sm hover:text-gray-600">Omitir</button>
-                    <button 
-                        onClick={handleNext} 
-                        className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors shadow-lg shadow-orange-100 flex items-center gap-2"
-                    >
-                        {step === steps.length - 1 ? '¡Listo!' : 'Siguiente'} <ArrowRight size={16}/>
-                    </button>
-                </div>
-            </motion.div>
-        </div>
+                    <h3 className="text-xl font-black text-slate-900 mb-2">{steps[step].title}</h3>
+                    <p className="text-slate-500 text-sm leading-relaxed mb-6 font-medium">{steps[step].desc}</p>
+                    <div className="flex justify-between items-center">
+                        <button onClick={onClose} className="text-slate-400 font-bold text-xs hover:text-slate-600 transition">Saltar</button>
+                        <button onClick={handleNext} className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2 transform active:scale-95">
+                            {step === steps.length - 1 ? '¡Finalizar!' : 'Siguiente'} <ArrowRight size={16}/>
+                        </button>
+                    </div>
+                </motion.div>
+            </div>
+            )}
+        </>
     );
 };
 
 // --- COMPONENTE: TARJETA DE PEDIDO ---
 const OrderCard = ({ order }: { order: Pedido }) => {
   const [expanded, setExpanded] = useState(false);
-  const statusColors = { pendiente: 'bg-yellow-50 text-yellow-700 border-yellow-200', pagado: 'bg-purple-50 text-purple-700 border-purple-200', atendido: 'bg-green-50 text-green-700 border-green-200', cancelado: 'bg-red-50 text-red-700 border-red-200' };
-  const statusLabels = { pendiente: 'Pendiente', pagado: 'Pagado', atendido: 'Listo', cancelado: 'Cancelado' };
+  const statusConfig = { 
+      pendiente: { color: 'bg-orange-100 text-orange-700', label: 'Pendiente', icon: Clock }, 
+      pagado: { color: 'bg-purple-100 text-purple-700', label: 'Pagado', icon: Banknote }, 
+      atendido: { color: 'bg-emerald-100 text-emerald-700', label: 'Completado', icon: CheckCircle2 }, 
+      cancelado: { color: 'bg-red-100 text-red-700', label: 'Cancelado', icon: X } 
+  };
+  const StatusIcon = statusConfig[order.estado].icon;
 
   return (
-    <motion.div layout className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-3">
-      <div onClick={() => setExpanded(!expanded)} className={`p-4 flex justify-between items-center cursor-pointer transition-colors ${expanded ? 'bg-gray-50' : 'bg-white'}`}>
-        <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-full ${order.tipo_entrega === 'delivery' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
-                {order.tipo_entrega === 'delivery' ? <Bike className="w-5 h-5"/> : <Store className="w-5 h-5"/>}
-            </div>
-            <div>
-                <h4 className="font-bold text-gray-900 text-sm">Pedido #{order.id}</h4>
-                <p className="text-xs text-gray-400">{new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-            </div>
+    <motion.div layout className="bg-white rounded-[20px] shadow-sm border border-slate-100 overflow-hidden mb-4 hover:shadow-md transition-shadow">
+      <div onClick={() => setExpanded(!expanded)} className="p-5 cursor-pointer bg-white">
+        <div className="flex justify-between items-start mb-4">
+             <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-2xl ${order.tipo_entrega === 'delivery' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                    {order.tipo_entrega === 'delivery' ? <Bike className="w-6 h-6"/> : <Store className="w-6 h-6"/>}
+                </div>
+                <div>
+                    <h4 className="font-black text-slate-900 text-lg">Pedido #{order.id}</h4>
+                    <p className="text-xs text-slate-400 font-bold">{new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                </div>
+             </div>
+             <div className={`px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 ${statusConfig[order.estado].color}`}>
+                 <StatusIcon className="w-3 h-3"/> {statusConfig[order.estado].label.toUpperCase()}
+             </div>
         </div>
-        <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${statusColors[order.estado]}`}>{statusLabels[order.estado].toUpperCase()}</span>
-            {expanded ? <ChevronUp className="w-4 h-4 text-gray-400"/> : <ChevronDown className="w-4 h-4 text-gray-400"/>}
+        
+        <div className="flex justify-between items-center mt-2">
+            <span className="text-sm font-bold text-slate-500">{order.items.length} productos</span>
+            <div className="flex items-center gap-2">
+                <span className="font-black text-slate-900 text-xl">S/ {order.total.toFixed(2)}</span>
+                <motion.div animate={{ rotate: expanded ? 180 : 0 }} className="bg-slate-100 p-1 rounded-full"><ChevronDown className="w-4 h-4 text-slate-600"/></motion.div>
+            </div>
         </div>
       </div>
+
       <AnimatePresence>
         {expanded && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-gray-100">
-                <div className="p-4 bg-white">
-                    <p className="text-xs font-bold text-gray-400 uppercase mb-2">Productos</p>
-                    <div className="space-y-2 mb-4">
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-slate-100 bg-slate-50/50">
+                <div className="p-5">
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Detalle de Compra</p>
+                    <div className="space-y-3 mb-5">
                         {order.items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between text-sm text-gray-700">
-                                <span><span className="font-bold">{item.cantidad}x</span> {item.nombre}</span>
-                                <span className="font-medium">S/ {(item.precio * item.cantidad).toFixed(2)}</span>
+                            <div key={idx} className="flex justify-between text-sm items-center bg-white p-3 rounded-xl border border-slate-100">
+                                <span className="text-slate-700 font-medium"><span className="font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md mr-2">{item.cantidad}x</span> {item.nombre}</span>
+                                <span className="font-bold text-slate-900">S/ {(item.precio * item.cantidad).toFixed(2)}</span>
                             </div>
                         ))}
                     </div>
-                    <div className="border-t border-gray-100 pt-3 mt-3">
-                        <div className="flex justify-between items-center mb-2">
-                             <span className="text-xs font-bold text-gray-400 uppercase">Método de Pago</span>
-                             <span className={`text-xs font-bold px-2 py-0.5 rounded ${order.metodo_pago === 'yape' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
-                                {order.metodo_pago === 'yape' ? '📱 Yape/Plin' : '💵 Efectivo'}
-                             </span>
-                        </div>
-                        {order.tipo_entrega === 'delivery' && (
-                           <div className="mb-3">
-                               <p className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1"><MapPin className="w-3 h-3"/> Dirección</p>
-                               <p className="text-xs text-gray-600 font-medium ml-4">{order.direccion || 'Ubicación GPS'}</p>
-                           </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                           <span className="text-gray-500 font-medium text-sm">Total Pagado</span>
-                           <span className="text-xl font-black text-gray-900">S/ {order.total.toFixed(2)}</span>
-                        </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                         <div className="bg-white p-3 rounded-xl border border-slate-100">
+                             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Método de Pago</p>
+                             <div className="flex items-center gap-2 font-bold text-slate-700 text-sm">
+                                 {order.metodo_pago === 'yape' ? <Smartphone className="w-4 h-4 text-purple-600"/> : <Banknote className="w-4 h-4 text-green-600"/>}
+                                 {order.metodo_pago === 'yape' ? 'Yape/Plin' : 'Efectivo'}
+                             </div>
+                         </div>
+                         <div className="bg-white p-3 rounded-xl border border-slate-100">
+                             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Entrega</p>
+                             <div className="flex items-center gap-2 font-bold text-slate-700 text-sm truncate">
+                                 <MapPin className="w-4 h-4 text-red-500"/>
+                                 <span className="truncate">{order.direccion || 'Tienda'}</span>
+                             </div>
+                         </div>
                     </div>
+                    {order.comprobante_url && (
+                        <button onClick={() => window.open(order.comprobante_url, '_blank')} className="w-full mt-4 py-3 bg-white border border-indigo-100 text-indigo-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-50 transition">
+                            <ImageIcon className="w-4 h-4"/> Ver Comprobante de Pago
+                        </button>
+                    )}
                 </div>
             </motion.div>
         )}
@@ -349,19 +370,19 @@ const OrderCard = ({ order }: { order: Pedido }) => {
   );
 };
 
-// --- COMPONENTE FAQ ITEM ---
+// --- FAQ ITEM ---
 const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
     const [expanded, setExpanded] = useState(false);
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <button onClick={() => setExpanded(!expanded)} className="w-full flex justify-between items-center p-4 text-left font-bold text-gray-800 text-sm">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all hover:border-slate-300">
+            <button onClick={() => setExpanded(!expanded)} className="w-full flex justify-between items-center p-5 text-left font-bold text-slate-800 text-sm">
                 {question}
-                {expanded ? <ChevronUp className="w-4 h-4 text-gray-400"/> : <ChevronDown className="w-4 h-4 text-gray-400"/>}
+                <motion.div animate={{ rotate: expanded ? 180 : 0 }}><ChevronDown className="w-5 h-5 text-slate-400"/></motion.div>
             </button>
             <AnimatePresence>
                 {expanded && (
-                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="bg-gray-50 px-4 pb-4">
-                         <p className="text-xs text-gray-600 leading-relaxed pt-2 border-t border-gray-100">{answer}</p>
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                         <div className="px-5 pb-5 text-sm text-slate-500 leading-relaxed font-medium">{answer}</div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -438,7 +459,7 @@ export default function ClientCatalog() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // --- INIT ---
+  // --- INIT & REALTIME SYNC ---
   useEffect(() => {
     const initData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -464,16 +485,32 @@ export default function ClientCatalog() {
       const hasSeenTour = localStorage.getItem('hasSeenTour');
       if (!hasSeenTour) setTimeout(() => setShowTour(true), 1500); 
       
-      supabase.channel('mis-pedidos-realtime').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `user_id=eq.${user.id}` }, (payload) => {
+      // REALTIME: PEDIDOS (UPDATE)
+      const ordersSub = supabase.channel('mis-pedidos-realtime')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `user_id=eq.${user.id}` }, (payload) => {
            const newOrder = payload.new as Pedido;
            setMyOrders((prev) => prev.map((order) => order.id === newOrder.id ? newOrder : order));
            showToast(`Pedido #${newOrder.id}: ${newOrder.estado.toUpperCase()}`, 'success');
-      }).subscribe();
+           const audio = new Audio('/notification.mp3'); audio.play().catch(()=>{});
+        }).subscribe();
 
-      supabase.channel('productos-stock-realtime').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'productos' }, (payload) => {
-          const updatedProd = payload.new as Producto;
-          setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
-      }).subscribe();
+      // REALTIME: PRODUCTOS (INSERT, UPDATE, DELETE)
+      const productsSub = supabase.channel('productos-stock-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, (payload) => {
+            if (payload.eventType === 'INSERT') {
+                setProducts(prev => [payload.new as Producto, ...prev]);
+            } else if (payload.eventType === 'UPDATE') {
+                const updatedProd = payload.new as Producto;
+                setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+            } else if (payload.eventType === 'DELETE') {
+                setProducts(prev => prev.filter(p => p.id !== payload.old.id));
+            }
+        }).subscribe();
+
+        return () => {
+            supabase.removeChannel(ordersSub);
+            supabase.removeChannel(productsSub);
+        }
     };
     initData();
   }, [router]);
@@ -635,7 +672,7 @@ export default function ClientCatalog() {
   };
 
   const totalCartPrice = cart.reduce((acc, item) => acc + (item.precioFinal * item.cantidad), 0);
-  const categories = ['Todos', ...Array.from(new Set(products.map(p => p.categoria)))];
+  const categories = ['Todos', ...Array.from(new Set(products.map(p => p.categoria)))].sort();
 
   // --- CHECKOUT ---
   const handlePlaceOrder = async () => {
@@ -646,12 +683,14 @@ export default function ClientCatalog() {
       setLoading(true);
       
       if (deliveryType === 'delivery' && showSaveAddress && newAddressAlias && userId) {
-          await supabase.from('user_addresses').insert({
-              user_id: userId,
-              alias: newAddressAlias,
-              direccion: address
-          });
-          fetchAddresses(userId);
+          try {
+              await supabase.from('user_addresses').insert({
+                  user_id: userId,
+                  alias: newAddressAlias,
+                  direccion: address
+              });
+              fetchAddresses(userId);
+          } catch (e: any) { e.printStackTrace() } 
       }
 
       let uploadedUrl: string | null = null;
@@ -709,22 +748,22 @@ export default function ClientCatalog() {
           return (
               <>
                   {currentView === 'store' && (
-                      <div id="tour-categories" className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full mb-4 sticky top-[65px] z-20 bg-gray-50/95 backdrop-blur-sm py-2">
+                      <div id="tour-categories" className="flex gap-2 overflow-x-auto pb-4 pt-2 scrollbar-hide w-full mb-2 sticky top-[65px] z-20 bg-slate-50/95 backdrop-blur-md">
                         {categories.map((cat) => (
-                          <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${selectedCategory === cat ? 'bg-gray-900 text-white border-gray-900 shadow-md transform scale-105' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{cat}</button>
+                          <motion.button whileTap={{ scale: 0.95 }} key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all shadow-sm ${selectedCategory === cat ? 'bg-slate-900 text-white shadow-md ring-2 ring-slate-900 ring-offset-1' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'}`}>{cat}</motion.button>
                         ))}
                       </div>
                   )}
 
                   {currentView === 'favorites' && productsToShow.length === 0 && (
-                      <div className="text-center py-20 opacity-50"><Heart className="w-20 h-20 mx-auto mb-4 text-gray-300"/> <p className="font-medium">No tienes favoritos aún</p></div>
+                      <div className="text-center py-32 opacity-50 flex flex-col items-center animate-in fade-in zoom-in"><Heart className="w-24 h-24 mb-6 text-slate-200"/> <p className="font-bold text-xl text-slate-400">Aún no tienes favoritos</p><p className="text-sm text-slate-300 mt-2">Guarda lo que te gusta para después</p></div>
                   )}
 
                   {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 gap-4"><Loader2 className="animate-spin text-orange-500 w-10 h-10"/><p className="text-gray-400 font-medium text-sm animate-pulse">Cargando bodega...</p></div>
+                    <div className="flex flex-col items-center justify-center py-32 gap-6"><Loader2 className="animate-spin text-indigo-600 w-12 h-12"/><p className="text-slate-400 font-bold text-sm animate-pulse tracking-widest">CARGANDO TIENDA...</p></div>
                   ) : (
                     <>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6 pb-8">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 pb-20">
                           <AnimatePresence mode='popLayout'>
                             {currentProducts.map((prod) => {
                               const activeOffer = isOfferActive(prod);
@@ -732,40 +771,40 @@ export default function ClientCatalog() {
                               const outOfStock = prod.stock <= 0;
 
                               return (
-                              <motion.div key={prod.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ y: -5 }} className={`bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-gray-100 hover:shadow-xl hover:border-orange-100 transition-all group relative flex flex-col justify-between h-full ${outOfStock ? 'opacity-70 grayscale' : ''}`}>
+                              <motion.div key={prod.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ y: -8 }} className={`bg-white rounded-[24px] p-3 sm:p-4 shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all group relative flex flex-col justify-between h-full ${outOfStock ? 'opacity-60 grayscale' : ''}`}>
                                 
-                                <div className="aspect-square bg-gray-100 rounded-xl mb-3 overflow-hidden relative cursor-pointer" onClick={() => setSelectedProduct(prod)}>
-                                  <div className="absolute inset-0 flex items-center justify-center z-0"><ImageIcon className="text-gray-300 w-10 h-10" /></div>
-                                  {prod.imagen_url && <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-cover relative z-10 transition-transform duration-500 group-hover:scale-110" onError={(e) => e.currentTarget.style.display = 'none'} />}
+                                <div className="aspect-square bg-slate-50 rounded-2xl mb-4 overflow-hidden relative cursor-pointer group-hover:bg-indigo-50/30 transition-colors" onClick={() => setSelectedProduct(prod)}>
+                                  <div className="absolute inset-0 flex items-center justify-center z-0"><ImageIcon className="text-slate-200 w-12 h-12" /></div>
+                                  {prod.imagen_url && <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-cover relative z-10 transition-transform duration-700 group-hover:scale-110" onError={(e) => e.currentTarget.style.display = 'none'} />}
                                   
                                   {outOfStock && (
-                                      <div className="absolute inset-0 z-30 bg-black/50 flex items-center justify-center backdrop-blur-[2px]">
-                                          <span className="bg-red-600 text-white font-black px-3 py-1 rounded-lg transform -rotate-12 border-2 border-white shadow-lg">AGOTADO</span>
+                                      <div className="absolute inset-0 z-30 bg-white/60 flex items-center justify-center backdrop-blur-[1px]">
+                                          <span className="bg-slate-900 text-white font-black px-4 py-1.5 rounded-xl text-xs tracking-widest shadow-lg">AGOTADO</span>
                                       </div>
                                   )}
 
-                                  {!outOfStock && prod.stock < 5 && <span className="absolute bottom-2 left-2 z-20 bg-red-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm">¡Quedan {prod.stock}!</span>}
-                                  {activeOffer && !outOfStock && (<div className="absolute top-2 left-2 z-20 bg-orange-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-sm flex items-center gap-1 animate-pulse"><Zap className="w-3 h-3 fill-white"/> OFERTA</div>)}
+                                  {!outOfStock && prod.stock < 5 && <span className="absolute bottom-2 left-2 z-20 bg-red-500/90 text-white text-[10px] font-black px-2.5 py-1 rounded-lg backdrop-blur-sm shadow-sm">¡Últimos {prod.stock}!</span>}
+                                  {activeOffer && !outOfStock && (<div className="absolute top-2 left-2 z-20 bg-orange-500 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-md flex items-center gap-1"><Zap className="w-3 h-3 fill-white"/> OFERTA</div>)}
                                   
-                                  <button onClick={(e) => {e.stopPropagation(); toggleFavorite(prod.id)}} className="absolute top-2 right-2 z-30 p-1.5 rounded-full bg-white/80 hover:bg-white shadow-sm transition-transform active:scale-90">
-                                      <Heart className={`w-4 h-4 ${isFav ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} />
+                                  <button onClick={(e) => {e.stopPropagation(); toggleFavorite(prod.id)}} className="absolute top-2 right-2 z-30 p-2 rounded-full bg-white/80 hover:bg-white shadow-sm transition-transform active:scale-90 hover:shadow-md">
+                                      <Heart className={`w-4 h-4 ${isFav ? 'fill-red-500 text-red-500' : 'text-slate-400'}`} />
                                   </button>
                                 </div>
 
                                 <div>
-                                  <h3 onClick={() => setSelectedProduct(prod)} className="font-bold text-gray-800 text-sm sm:text-base leading-tight mb-1 line-clamp-2 cursor-pointer hover:text-orange-600 transition-colors">{prod.nombre}</h3>
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">{prod.categoria}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1 line-clamp-1">{prod.categoria}</p>
+                                  <h3 onClick={() => setSelectedProduct(prod)} className="font-bold text-slate-800 text-sm sm:text-base leading-tight mb-3 line-clamp-2 cursor-pointer hover:text-indigo-600 transition-colors h-10">{prod.nombre}</h3>
                                   <div className="flex items-end justify-between mt-auto">
-                                    <div>
-                                      {activeOffer && prod.precio_oferta ? (
-                                        <div className="flex flex-col"><span className="text-xs text-gray-400 line-through decoration-red-400 decoration-2">S/ {prod.precio.toFixed(2)}</span><span className="text-xl font-black text-orange-600">S/ {prod.precio_oferta.toFixed(2)}</span></div>
-                                      ) : (<span className="text-lg font-extrabold text-gray-900">S/ {prod.precio.toFixed(2)}</span>)}
+                                    <div className="flex flex-col">
+                                        {activeOffer && prod.precio_oferta ? (
+                                          <><span className="text-xs text-slate-400 line-through font-medium">S/ {prod.precio.toFixed(2)}</span><span className="text-lg font-black text-orange-600">S/ {prod.precio_oferta.toFixed(2)}</span></>
+                                        ) : (<span className="text-lg font-black text-slate-900">S/ {prod.precio.toFixed(2)}</span>)}
                                     </div>
                                     <motion.button 
-                                        whileTap={{ scale: 0.8 }} 
+                                        whileTap={{ scale: 0.9 }} 
                                         disabled={outOfStock}
                                         onClick={() => addToCart(prod)} 
-                                        className={`p-2.5 rounded-xl shadow-lg transition-colors ${outOfStock ? 'bg-gray-200 cursor-not-allowed text-gray-400' : 'bg-gray-900 text-white hover:bg-orange-600'}`}
+                                        className={`w-10 h-10 rounded-xl shadow-md flex items-center justify-center transition-all ${outOfStock ? 'bg-slate-100 cursor-not-allowed text-slate-300' : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-100'}`}
                                     >
                                         {outOfStock ? <X className="w-5 h-5"/> : <Plus className="w-5 h-5" />}
                                     </motion.button>
@@ -777,24 +816,10 @@ export default function ClientCatalog() {
                         </div>
 
                         {productsToShow.length > ITEMS_PER_PAGE && (
-                            <div className="flex justify-center items-center gap-4 pb-24">
-                                <button 
-                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                    disabled={currentPage === 1}
-                                    className="p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <ChevronLeft className="w-5 h-5 text-gray-600"/>
-                                </button>
-                                <span className="text-sm font-bold text-gray-600">
-                                    Página {currentPage} de {totalPages}
-                                </span>
-                                <button 
-                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                    disabled={currentPage === totalPages}
-                                    className="p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <ChevronRight className="w-5 h-5 text-gray-600"/>
-                                </button>
+                            <div className="flex justify-center items-center gap-4 pb-32">
+                                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-5 h-5 text-slate-600"/></button>
+                                <span className="text-sm font-bold text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">Página {currentPage} de {totalPages}</span>
+                                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-5 h-5 text-slate-600"/></button>
                             </div>
                         )}
                     </>
@@ -805,69 +830,71 @@ export default function ClientCatalog() {
       switch (currentView) {
           case 'orders':
               return (
-                  <div className="max-w-2xl mx-auto pb-20">
-                      <h2 className="text-2xl font-black mb-6 flex items-center gap-2"><Clock className="w-7 h-7 text-orange-500"/> Mis Pedidos</h2>
+                  <div className="max-w-2xl mx-auto pb-32">
+                      <div className="flex items-center gap-3 mb-8"><div className="p-3 bg-indigo-50 rounded-2xl"><Clock className="w-6 h-6 text-indigo-600"/></div><h2 className="text-3xl font-black text-slate-900">Mis Pedidos</h2></div>
                       {myOrders.length === 0 ? (
-                         <div className="text-center py-20 opacity-50"><Package className="w-20 h-20 mx-auto mb-4 text-gray-300"/> <p className="font-medium">Aún no tienes pedidos</p></div>
+                         <div className="text-center py-32 opacity-50 flex flex-col items-center"><Package className="w-24 h-24 mb-6 text-slate-200"/> <p className="font-bold text-xl text-slate-400">Aún no tienes pedidos</p><button onClick={()=>{setCurrentView('store')}} className="mt-4 text-indigo-600 font-bold hover:underline">Ir a comprar</button></div>
                       ) : myOrders.map(order => (<OrderCard key={order.id} order={order} />))}
                   </div>
               );
           case 'profile':
               return (
-                  <div className="max-w-lg mx-auto pb-20">
-                        <h2 className="text-2xl font-black mb-6 flex items-center gap-2"><User className="w-7 h-7 text-blue-500"/> Mi Perfil</h2>
-                        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                            <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 relative"></div>
-                            <div className="px-6 pb-6 relative">
-                                <div className="w-24 h-24 rounded-full bg-white p-1 absolute -top-12 left-1/2 -translate-x-1/2 shadow-lg group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
-                                    <div className="w-full h-full rounded-full bg-gray-200 overflow-hidden relative">
+                  <div className="max-w-lg mx-auto pb-32">
+                        <div className="flex items-center gap-3 mb-8"><div className="p-3 bg-indigo-50 rounded-2xl"><User className="w-6 h-6 text-indigo-600"/></div><h2 className="text-3xl font-black text-slate-900">Mi Perfil</h2></div>
+                        <div className="bg-white rounded-[32px] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+                            <div className="h-40 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                            </div>
+                            <div className="px-8 pb-8 relative">
+                                <div className="w-28 h-28 rounded-full bg-white p-1.5 absolute -top-14 left-1/2 -translate-x-1/2 shadow-xl group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
+                                    <div className="w-full h-full rounded-full bg-slate-100 overflow-hidden relative border-4 border-white">
                                              {avatarUploading ? (
-                                                 <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Loader2 className="w-6 h-6 text-white animate-spin"/></div>
+                                                 <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Loader2 className="w-8 h-8 text-white animate-spin"/></div>
                                              ) : userData?.avatar_url ? (
                                                  <img src={userData.avatar_url} className="w-full h-full object-cover" />
                                              ) : (
-                                                 <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400">{userData?.nombre.charAt(0)}</div>
+                                                 <div className="w-full h-full flex items-center justify-center text-4xl font-black text-slate-300">{userData?.nombre.charAt(0)}</div>
                                              )}
                                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                                 <Camera className="w-6 h-6 text-white"/>
+                                                 <Camera className="w-8 h-8 text-white"/>
                                              </div>
                                     </div>
                                     <input type="file" ref={avatarInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
                                 </div>
-                                <div className="mt-14 text-center">
-                                    <h3 className="text-xl font-bold text-gray-900">{userData?.nombre}</h3>
-                                    <p className="text-sm text-gray-500">{userData?.telefono || 'Sin teléfono'}</p>
+                                <div className="mt-16 text-center mb-8">
+                                    <h3 className="text-2xl font-black text-slate-900">{userData?.nombre}</h3>
+                                    <p className="text-sm font-medium text-slate-500">{userData?.telefono || 'Sin teléfono'}</p>
                                 </div>
-                                <div className="mt-8 space-y-4">
+                                <div className="space-y-4">
                                     {isEditingProfile ? (
-                                           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                                            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                                                 <div>
-                                                    <label className="text-xs font-bold text-gray-400 uppercase">Nombre</label>
-                                                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full border rounded-xl p-3 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                                                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Nombre</label>
+                                                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-white border-slate-200 rounded-xl p-3.5 mt-1 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700"/>
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs font-bold text-gray-400 uppercase">Celular</label>
-                                                    <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full border rounded-xl p-3 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                                                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Celular</label>
+                                                    <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full bg-white border-slate-200 rounded-xl p-3.5 mt-1 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700"/>
                                                 </div>
-                                                <div className="flex gap-2 pt-2">
-                                                    <button onClick={() => setIsEditingProfile(false)} className="flex-1 py-3 rounded-xl bg-gray-100 font-bold text-gray-600 hover:bg-gray-200">Cancelar</button>
-                                                    <button onClick={handleSaveProfile} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Guardar Cambios</button>
+                                                <div className="flex gap-3 pt-2">
+                                                    <button onClick={() => setIsEditingProfile(false)} className="flex-1 py-3.5 rounded-xl bg-white border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                                                    <button onClick={handleSaveProfile} className="flex-1 py-3.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">Guardar Cambios</button>
                                                 </div>
-                                           </div>
+                                            </div>
                                     ) : (
-                                           <>
-                                                <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-4">
-                                                    <div className="p-2 bg-white rounded-lg shadow-sm"><User className="w-5 h-5 text-gray-400"/></div>
-                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Nombre</p><p className="font-medium text-gray-900">{userData?.nombre}</p></div>
+                                            <>
+                                                <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4 border border-slate-100">
+                                                    <div className="p-3 bg-white rounded-xl shadow-sm text-indigo-500"><User className="w-5 h-5"/></div>
+                                                    <div><p className="text-[10px] text-slate-400 font-bold uppercase">Nombre Completo</p><p className="font-bold text-slate-900">{userData?.nombre}</p></div>
                                                 </div>
-                                                <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-4">
-                                                    <div className="p-2 bg-white rounded-lg shadow-sm"><Smartphone className="w-5 h-5 text-gray-400"/></div>
-                                                    <div><p className="text-xs text-gray-400 font-bold uppercase">Celular</p><p className="font-medium text-gray-900">{userData?.telefono || 'No registrado'}</p></div>
+                                                <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4 border border-slate-100">
+                                                    <div className="p-3 bg-white rounded-xl shadow-sm text-indigo-500"><Smartphone className="w-5 h-5"/></div>
+                                                    <div><p className="text-[10px] text-slate-400 font-bold uppercase">Número de Celular</p><p className="font-bold text-slate-900">{userData?.telefono || 'No registrado'}</p></div>
                                                 </div>
-                                                <button onClick={() => setIsEditingProfile(true)} className="w-full py-3 mt-2 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 flex items-center justify-center gap-2">
+                                                <button onClick={() => setIsEditingProfile(true)} className="w-full py-4 mt-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 flex items-center justify-center gap-2 shadow-lg shadow-slate-200 transition-all active:scale-95">
                                                     <Edit2 className="w-4 h-4"/> Editar Información
                                                 </button>
-                                           </>
+                                            </>
                                     )}
                                 </div>
                             </div>
@@ -876,21 +903,22 @@ export default function ClientCatalog() {
               );
           case 'support':
               return (
-                <div className="max-w-lg mx-auto pb-20">
-                    <h2 className="text-2xl font-black mb-6 flex items-center gap-2"><HelpCircle className="w-7 h-7 text-green-500"/> Ayuda y Soporte</h2>
+                <div className="max-w-lg mx-auto pb-32">
+                    <div className="flex items-center gap-3 mb-8"><div className="p-3 bg-green-50 rounded-2xl"><HelpCircle className="w-6 h-6 text-green-600"/></div><h2 className="text-3xl font-black text-slate-900">Ayuda y Soporte</h2></div>
                     <div className="space-y-6">
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"><MessageCircle className="w-8 h-8 text-green-600"/></div>
-                            <h3 className="font-bold text-lg mb-1">¿Necesitas ayuda urgente?</h3>
-                            <p className="text-gray-500 text-sm mb-6">Contáctanos directamente por WhatsApp o llamada.</p>
-                            <div className="flex gap-3">
-                                <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=Hola,%20tengo%20una%20consulta`, '_blank')} className="flex-1 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 flex items-center justify-center gap-2"><MessageCircle className="w-5 h-5"/> WhatsApp</button>
-                                <button onClick={() => window.open('tel:961241085')} className="flex-1 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 flex items-center justify-center gap-2"><Smartphone className="w-5 h-5"/> Llamar</button>
+                        <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 rounded-[32px] shadow-lg shadow-green-200 text-center text-white relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><MessageCircle className="w-10 h-10 text-white"/></div>
+                            <h3 className="font-black text-2xl mb-2">¿Necesitas ayuda?</h3>
+                            <p className="text-green-100 text-sm mb-8 font-medium">Nuestro equipo está listo para resolver tus dudas por WhatsApp.</p>
+                            <div className="flex gap-4">
+                                <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=Hola,%20tengo%20una%20consulta`, '_blank')} className="flex-1 py-4 bg-white text-green-600 rounded-xl font-bold hover:bg-green-50 flex items-center justify-center gap-2 shadow-lg transition"><MessageCircle className="w-5 h-5"/> WhatsApp</button>
+                                <button onClick={() => window.open('tel:961241085')} className="flex-1 py-4 bg-black/20 text-white rounded-xl font-bold hover:bg-black/30 flex items-center justify-center gap-2 backdrop-blur-md transition"><Smartphone className="w-5 h-5"/> Llamar</button>
                             </div>
                         </div>
                         <div>
-                            <h3 className="font-bold text-gray-900 mb-3 ml-1">Preguntas Frecuentes</h3>
-                            <div className="space-y-2">
+                            <h3 className="font-black text-slate-900 mb-4 ml-1 text-lg">Preguntas Frecuentes</h3>
+                            <div className="space-y-3">
                                 <FAQItem question="¿Cuál es el tiempo de entrega?" answer="El tiempo promedio es de 30 a 45 minutos dependiendo de la zona." />
                                 <FAQItem question="¿Métodos de pago?" answer="Aceptamos Yape, Plin y efectivo contra entrega." />
                                 <FAQItem question="¿Puedo cancelar mi pedido?" answer="Solo si el estado es 'Pendiente'. Si ya está en camino, contáctanos por WhatsApp." />
@@ -901,34 +929,35 @@ export default function ClientCatalog() {
               );
           case 'settings':
               return (
-                  <div className="max-w-lg mx-auto pb-20">
-                      <h2 className="text-2xl font-black mb-6 flex items-center gap-2"><Settings className="w-7 h-7 text-gray-700"/> Configuración</h2>
-                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-                           <div className="p-4 flex justify-between items-center">
-                               <div><p className="font-bold text-gray-800">Notificaciones</p><p className="text-xs text-gray-500">Recibir alertas de pedidos</p></div>
-                               <div className="w-10 h-6 bg-green-500 rounded-full relative"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
+                  <div className="max-w-lg mx-auto pb-32">
+                      <div className="flex items-center gap-3 mb-8"><div className="p-3 bg-slate-100 rounded-2xl"><Settings className="w-6 h-6 text-slate-700"/></div><h2 className="text-3xl font-black text-slate-900">Configuración</h2></div>
+                      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-2">
+                           <div className="p-4 flex justify-between items-center hover:bg-slate-50 rounded-2xl transition cursor-pointer">
+                               <div><p className="font-bold text-slate-800">Notificaciones</p><p className="text-xs text-slate-500 font-medium">Recibir alertas de pedidos</p></div>
+                               <div className="w-12 h-7 bg-green-500 rounded-full relative"><div className="w-5 h-5 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
                            </div>
-                           <div className="p-4 flex justify-between items-center">
-                               <div><p className="font-bold text-gray-800">Sonidos</p><p className="text-xs text-gray-500">Efectos de sonido en la app</p></div>
-                               <div className="w-10 h-6 bg-green-500 rounded-full relative"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
+                           <div className="p-4 flex justify-between items-center hover:bg-slate-50 rounded-2xl transition cursor-pointer">
+                               <div><p className="font-bold text-slate-800">Sonidos</p><p className="text-xs text-slate-500 font-medium">Efectos de sonido en la app</p></div>
+                               <div className="w-12 h-7 bg-green-500 rounded-full relative"><div className="w-5 h-5 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
                            </div>
-                           <div className="p-4">
-                               <button onClick={() => showToast("Caché limpiada", 'success')} className="text-red-500 font-bold text-sm flex items-center gap-2"><Trash2 className="w-4 h-4"/> Borrar caché de la aplicación</button>
+                           <div className="p-4 hover:bg-red-50 rounded-2xl transition cursor-pointer">
+                               <button onClick={() => showToast("Caché limpiada", 'success')} className="text-red-500 font-bold text-sm flex items-center gap-3 w-full"><Trash2 className="w-5 h-5"/> Borrar caché de la aplicación</button>
                            </div>
                       </div>
                   </div>
               );
           case 'about':
             return (
-                <div className="max-w-lg mx-auto pb-20 text-center">
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 inline-block mb-6">
-                        <Store className="w-16 h-16 text-orange-500 mx-auto mb-4"/>
-                        <h1 className="text-2xl font-black text-gray-900">Bodega Jormard</h1>
-                        <p className="text-gray-500">Tu tienda en el bolsillo</p>
-                        <span className="inline-block mt-4 px-3 py-1 bg-gray-100 rounded-full text-xs font-bold text-gray-600">v2.4.0 (Web)</span>
+                <div className="max-w-lg mx-auto pb-32 text-center pt-10">
+                    <div className="bg-white p-12 rounded-[40px] shadow-xl shadow-slate-200 border border-slate-100 inline-block mb-10 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 via-pink-500 to-indigo-500"></div>
+                        <div className="bg-slate-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><Store className="w-12 h-12 text-slate-900"/></div>
+                        <h1 className="text-3xl font-black text-slate-900 mb-1 tracking-tight">Bodega Jormard</h1>
+                        <p className="text-slate-500 font-medium">Tu tienda en el bolsillo</p>
+                        <span className="inline-block mt-6 px-4 py-1.5 bg-slate-100 rounded-full text-xs font-bold text-slate-600 tracking-wide">v2.5.0 Premium</span>
                     </div>
-                    <button onClick={() => window.open('https://bodega-jormard.vercel.app', '_blank')} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl mb-4 hover:bg-gray-800">Visitar Sitio Web</button>
-                    <p className="text-xs text-gray-400">© 2026 Jormard Inc. Todos los derechos reservados.</p>
+                    <button onClick={() => window.open('https://bodega-jormard.vercel.app', '_blank')} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl mb-8 hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200 active:scale-95">Visitar Sitio Web</button>
+                    <p className="text-xs text-slate-400 font-medium">© 2026 Jormard Inc. Todos los derechos reservados.</p>
                 </div>
             )
           default: return null;
@@ -937,11 +966,11 @@ export default function ClientCatalog() {
 
   // --- RENDER PRINCIPAL ---
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-orange-200">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-200">
       
       {/* TOUR GUIDE OVERLAY */}
       <AnimatePresence>
-         {showTour && <TourGuide isOpen={showTour} onClose={closeTour} />}
+         {showTour && <TourGuide isOpen={showTour} onClose={closeTour} setCurrentView={setCurrentView} setIsCartOpen={setIsCartOpen} />}
       </AnimatePresence>
 
       {/* MAPA */}
@@ -952,36 +981,39 @@ export default function ClientCatalog() {
       <AnimatePresence>
           {selectedProduct && (
               <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProduct(null)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-lg overflow-hidden relative z-10 shadow-2xl">
-                      <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-white/50 backdrop-blur-md p-2 rounded-full z-20 hover:bg-white"><X className="w-6 h-6"/></button>
-                      <div className="h-64 sm:h-80 bg-gray-100 relative">
-                          {selectedProduct.imagen_url ? <img src={selectedProduct.imagen_url} className="w-full h-full object-cover"/> : <div className="flex items-center justify-center h-full"><ImageIcon className="w-16 h-16 text-gray-300"/></div>}
-                          {isOfferActive(selectedProduct) && <div className="absolute bottom-4 left-4 bg-orange-600 text-white font-bold px-3 py-1 rounded-lg shadow-lg flex items-center gap-1"><Zap className="w-4 h-4 fill-white"/> OFERTA</div>}
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProduct(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+                  <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[32px] w-full max-w-md overflow-hidden relative z-10 shadow-2xl">
+                      <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-white/80 backdrop-blur-md p-2 rounded-full z-20 hover:bg-white shadow-sm transition"><X className="w-6 h-6 text-slate-700"/></button>
+                      <div className="h-72 sm:h-80 bg-slate-100 relative group">
+                          {selectedProduct.imagen_url ? <img src={selectedProduct.imagen_url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"/> : <div className="flex items-center justify-center h-full"><ImageIcon className="w-20 h-20 text-slate-300"/></div>}
+                          {isOfferActive(selectedProduct) && <div className="absolute bottom-4 left-4 bg-orange-500 text-white font-black px-4 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 text-xs"><Zap className="w-4 h-4 fill-white"/> OFERTA FLASH</div>}
                       </div>
-                      <div className="p-6">
-                          <div className="flex justify-between items-start mb-2">
+                      <div className="p-8">
+                          <div className="flex justify-between items-start mb-4">
                               <div>
-                                  <p className="text-xs font-bold text-gray-400 uppercase mb-1">{selectedProduct.categoria}</p>
-                                  <h2 className="text-2xl font-black text-gray-900 leading-tight">{selectedProduct.nombre}</h2>
+                                  <p className="text-xs font-bold text-indigo-500 uppercase mb-1 tracking-wider">{selectedProduct.categoria}</p>
+                                  <h2 className="text-3xl font-black text-slate-900 leading-tight">{selectedProduct.nombre}</h2>
                               </div>
                               <div className="text-right">
                                   {isOfferActive(selectedProduct) && selectedProduct.precio_oferta ? (
-                                      <><p className="text-sm text-gray-400 line-through">S/ {selectedProduct.precio.toFixed(2)}</p><p className="text-2xl font-black text-orange-600">S/ {selectedProduct.precio_oferta.toFixed(2)}</p></>
-                                  ) : <p className="text-2xl font-black text-gray-900">S/ {selectedProduct.precio.toFixed(2)}</p>}
+                                      <><p className="text-sm text-slate-400 line-through font-medium">S/ {selectedProduct.precio.toFixed(2)}</p><p className="text-3xl font-black text-orange-600">S/ {selectedProduct.precio_oferta.toFixed(2)}</p></>
+                                  ) : <p className="text-3xl font-black text-slate-900">S/ {selectedProduct.precio.toFixed(2)}</p>}
                               </div>
                           </div>
-                          <div className="flex items-center gap-2 mb-6">
-                              <div className={`px-3 py-1 rounded-full text-xs font-bold ${selectedProduct.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                  {selectedProduct.stock > 0 ? `Stock: ${selectedProduct.stock} unid.` : 'Agotado'}
+                          
+                          <div className="flex items-center gap-3 mb-8">
+                              <div className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 ${selectedProduct.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  <div className={`w-2 h-2 rounded-full ${selectedProduct.stock > 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                  {selectedProduct.stock > 0 ? `En Stock: ${selectedProduct.stock}` : 'Agotado'}
                               </div>
                           </div>
+
                           <button 
                             onClick={() => { addToCart(selectedProduct); setSelectedProduct(null); }} 
                             disabled={selectedProduct.stock <= 0}
-                            className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 ${selectedProduct.stock > 0 ? 'bg-gray-900 text-white hover:bg-orange-600 shadow-xl shadow-orange-100' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                            className={`w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl ${selectedProduct.stock > 0 ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-200' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
                           >
-                              {selectedProduct.stock > 0 ? <><ShoppingCart className="w-5 h-5"/> Agregar al Carrito</> : 'Sin Stock'}
+                              {selectedProduct.stock > 0 ? <><ShoppingCart className="w-5 h-5"/> Agregar a la Canasta</> : 'No Disponible'}
                           </button>
                       </div>
                   </motion.div>
@@ -989,157 +1021,182 @@ export default function ClientCatalog() {
           )}
       </AnimatePresence>
 
-      {/* --- SIDEBAR DE NAVEGACIÓN (Desktop & Mobile Drawer) --- */}
+      {/* --- SIDEBAR --- */}
       <AnimatePresence>
           {isMenuOpen && (
               <>
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsMenuOpen(false)} className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm lg:hidden" />
-                <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="fixed left-0 top-0 h-full w-[280px] bg-white z-50 shadow-2xl flex flex-col lg:hidden">
-                    {/* Drawer Content (Mobile) */}
-                    <div className="p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
-                                {userData?.avatar_url ? <img src={userData.avatar_url} className="w-full h-full object-cover"/> : <span className="font-bold text-xl">{userData?.nombre.charAt(0)}</span>}
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsMenuOpen(false)} className="fixed inset-0 bg-slate-900/60 z-40 backdrop-blur-sm lg:hidden" />
+                <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="fixed left-0 top-0 h-full w-[300px] bg-white z-50 shadow-2xl flex flex-col lg:hidden rounded-r-[32px]">
+                    <div className="p-8 bg-slate-900 text-white relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full blur-3xl -mr-10 -mt-10 opacity-50"></div>
+                        <div className="flex items-center gap-4 mb-4 relative z-10">
+                            <div className="w-14 h-14 rounded-full bg-white p-1 shadow-lg">
+                                <div className="w-full h-full rounded-full bg-slate-100 overflow-hidden flex items-center justify-center">
+                                    {userData?.avatar_url ? <img src={userData.avatar_url} className="w-full h-full object-cover"/> : <span className="font-black text-2xl text-slate-900">{userData?.nombre.charAt(0)}</span>}
+                                </div>
                             </div>
                             <div>
                                 <h3 className="font-bold text-lg leading-tight">{userData?.nombre}</h3>
-                                <p className="text-xs text-gray-400 truncate w-32">{userId}</p>
+                                <p className="text-xs text-slate-400 truncate w-32 font-medium">Cliente VIP</p>
                             </div>
                         </div>
                     </div>
-                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                        <button id="nav-store-mobile" onClick={() => { setCurrentView('store'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'store' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Store className="w-5 h-5"/> Tienda</button>
-                        <button id="nav-favorites-mobile" onClick={() => { setCurrentView('favorites'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'favorites' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Heart className="w-5 h-5"/> Favoritos</button>
-                        <button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Clock className="w-5 h-5"/> Mis Pedidos</button>
-                        <button id="nav-profile-mobile" onClick={() => { setCurrentView('profile'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'profile' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><User className="w-5 h-5"/> Mi Perfil</button>
-                        <div className="my-4 border-t border-gray-100"></div>
-                        <button id="nav-settings-mobile" onClick={() => { setCurrentView('settings'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'settings' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Settings className="w-5 h-5"/> Configuración</button>
-                        <button id="nav-support-mobile" onClick={() => { setCurrentView('support'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'support' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><HelpCircle className="w-5 h-5"/> Ayuda</button>
-                        <button onClick={() => { setIsMenuOpen(false); setShowTour(true); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors text-gray-600 hover:bg-gray-50`}><PlayCircle className="w-5 h-5"/> Tutorial</button>
-                        <button onClick={() => { setCurrentView('about'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'about' ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}><Info className="w-5 h-5"/> Acerca de</button>
+                    <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ml-2">Menú</p>
+                        <button id="nav-store-mobile" onClick={() => { setCurrentView('store'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'store' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}><Store className="w-5 h-5"/> Tienda</button>
+                        <button id="nav-favorites-mobile" onClick={() => { setCurrentView('favorites'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'favorites' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}><Heart className="w-5 h-5"/> Favoritos</button>
+                        <button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'orders' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}><Clock className="w-5 h-5"/> Mis Pedidos</button>
+                        <button id="nav-profile-mobile" onClick={() => { setCurrentView('profile'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'profile' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}><User className="w-5 h-5"/> Mi Perfil</button>
+                        <div className="my-6 border-t border-slate-100"></div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ml-2">Otros</p>
+                        <button id="nav-settings-mobile" onClick={() => { setCurrentView('settings'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'settings' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}><Settings className="w-5 h-5"/> Ajustes</button>
+                        <button id="nav-support-mobile" onClick={() => { setCurrentView('support'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'support' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}><HelpCircle className="w-5 h-5"/> Ayuda</button>
+                        {/* BOTON TUTORIAL MOVIL */}
+                        <button onClick={() => { setIsMenuOpen(false); setShowTour(true); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all text-slate-600 hover:bg-slate-50`}><PlayCircle className="w-5 h-5"/> Tutorial</button>
                     </nav>
-                    <div className="p-4 border-t border-gray-100">
-                        <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-50 text-red-600 font-bold hover:bg-red-100"><LogOut className="w-5 h-5"/> Cerrar Sesión</button>
+                    <div className="p-6 border-t border-slate-100">
+                        <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-4 rounded-2xl bg-red-50 text-red-600 font-bold hover:bg-red-100 transition-colors"><LogOut className="w-5 h-5"/> Cerrar Sesión</button>
                     </div>
                 </motion.div>
               </>
           )}
       </AnimatePresence>
 
-      {/* --- LAYOUT DESKTOP (Sidebar fijo a la izquierda) --- */}
       <div className="lg:flex">
-          <aside id="tour-menu" className="hidden lg:flex w-64 h-screen sticky top-0 bg-white border-r border-gray-100 flex-col z-20">
-             <div className="p-6 border-b border-gray-100 flex items-center gap-2">
-                 <div className="bg-orange-500 p-1.5 rounded-lg text-white"><Store className="w-6 h-6"/></div>
-                 <span className="font-black text-xl tracking-tight">Jormard</span>
+          <aside id="tour-menu" className="hidden lg:flex w-72 h-screen sticky top-0 bg-white border-r border-slate-100 flex-col z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+             <div className="p-8 flex items-center gap-3">
+                 <div className="bg-slate-900 p-2 rounded-xl text-white shadow-lg"><Store className="w-6 h-6"/></div>
+                 <span className="font-black text-2xl tracking-tight text-slate-900">Jormard</span>
              </div>
-             <nav className="flex-1 p-4 space-y-1">
-                 <button id="nav-store" onClick={() => setCurrentView('store')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'store' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Store className="w-5 h-5"/> Tienda</button>
-                 <button id="nav-favorites" onClick={() => setCurrentView('favorites')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'favorites' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Heart className="w-5 h-5"/> Favoritos</button>
-                 <button id="nav-orders" onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'orders' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Clock className="w-5 h-5"/> Pedidos</button>
-                 <button id="nav-profile" onClick={() => setCurrentView('profile')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'profile' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><User className="w-5 h-5"/> Perfil</button>
-                 <div className="my-4 border-t border-gray-100"></div>
-                 <button id="nav-settings" onClick={() => setCurrentView('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'settings' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><Settings className="w-5 h-5"/> Ajustes</button>
-                 <button id="nav-support" onClick={() => setCurrentView('support')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${currentView === 'support' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}><HelpCircle className="w-5 h-5"/> Soporte</button>
-                 <button onClick={() => setShowTour(true)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors text-gray-500 hover:bg-gray-50`}><PlayCircle className="w-5 h-5"/> Tutorial</button>
+             <nav className="flex-1 px-4 space-y-1">
+                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 px-4 mt-4">Principal</p>
+                 <button id="nav-store" onClick={() => setCurrentView('store')} className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'store' ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><Store className="w-5 h-5"/> Tienda</button>
+                 <button id="nav-favorites" onClick={() => setCurrentView('favorites')} className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'favorites' ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><Heart className="w-5 h-5"/> Favoritos</button>
+                 <button id="nav-orders" onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'orders' ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><Clock className="w-5 h-5"/> Pedidos</button>
+                 <button id="nav-profile" onClick={() => setCurrentView('profile')} className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'profile' ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><User className="w-5 h-5"/> Perfil</button>
+                 
+                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 px-4 mt-8">Preferencias</p>
+                 <button id="nav-settings" onClick={() => setCurrentView('settings')} className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'settings' ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><Settings className="w-5 h-5"/> Ajustes</button>
+                 <button id="nav-support" onClick={() => setCurrentView('support')} className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'support' ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><HelpCircle className="w-5 h-5"/> Soporte</button>
+                 {/* BOTON TUTORIAL PC */}
+                 <button onClick={() => setShowTour(true)} className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all text-slate-500 hover:bg-slate-50 hover:text-slate-900`}><PlayCircle className="w-5 h-5"/> Tutorial</button>
              </nav>
-             <div className="p-4 border-t border-gray-100">
-                <div className="flex items-center gap-3 mb-4 px-2">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                          {userData?.avatar_url ? <img src={userData.avatar_url} className="w-full h-full object-cover"/> : <span className="font-bold text-gray-500">{userData?.nombre.charAt(0)}</span>}
+             <div className="p-4 border-t border-slate-100 mx-4 mb-4">
+                <div className="flex items-center gap-3 mb-4 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden shadow-sm">
+                          {userData?.avatar_url ? <img src={userData.avatar_url} className="w-full h-full object-cover"/> : <span className="font-black text-slate-900">{userData?.nombre.charAt(0)}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm truncate">{userData?.nombre}</p>
-                          <p className="text-xs text-gray-400 truncate">Cliente</p>
+                          <p className="font-bold text-sm truncate text-slate-900">{userData?.nombre}</p>
+                          <p className="text-xs text-slate-500 truncate font-medium">Cliente</p>
                       </div>
                 </div>
-                <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gray-50 text-gray-600 font-bold hover:bg-gray-100 text-sm"><LogOut className="w-4 h-4"/> Salir</button>
+                <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all text-sm"><LogOut className="w-4 h-4"/> Cerrar Sesión</button>
              </div>
           </aside>
 
-          <div className="flex-1 min-h-screen">
+          <div className="flex-1 min-h-screen relative">
               {/* HEADER MOVIL */}
-              <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-100 px-4 py-3 flex lg:hidden items-center justify-between">
-                <div id="tour-menu-mobile" className="flex items-center gap-3">
-                    <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Menu className="w-6 h-6"/></button>
-                    <h1 className="font-extrabold text-lg leading-none tracking-tight">{currentView === 'store' ? 'Jormard' : currentView === 'orders' ? 'Mis Pedidos' : currentView === 'profile' ? 'Perfil' : 'Bodega'}</h1>
+              <nav className="bg-white/80 backdrop-blur-xl sticky top-0 z-30 border-b border-slate-100 px-5 py-4 flex lg:hidden items-center justify-between">
+                <div id="tour-menu-mobile" className="flex items-center gap-4">
+                    <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-slate-700 hover:bg-slate-100 rounded-xl transition"><Menu className="w-6 h-6"/></button>
+                    <h1 className="font-black text-xl text-slate-900 tracking-tight">{currentView === 'store' ? 'Jormard' : currentView === 'orders' ? 'Mis Pedidos' : currentView === 'profile' ? 'Perfil' : 'Bodega'}</h1>
                 </div>
-                <button id="tour-cart-mobile" onClick={() => setIsCartOpen(true)} className="relative p-2 hover:bg-orange-50 rounded-full group transition-colors">
-                  <ShoppingCart className="w-6 h-6 text-gray-600 group-hover:text-orange-600 transition-colors" />
-                  {cart.length > 0 && (<span className="absolute top-1 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-sm animate-in zoom-in">{cart.reduce((acc, item) => acc + item.cantidad, 0)}</span>)}
+                <button id="tour-cart-mobile" onClick={() => setIsCartOpen(true)} className="relative p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl group transition-all">
+                  <ShoppingCart className="w-5 h-5 text-slate-700 group-hover:text-indigo-600 transition-colors" />
+                  {cart.length > 0 && (<span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md animate-in zoom-in ring-2 ring-white">{cart.reduce((acc, item) => acc + item.cantidad, 0)}</span>)}
                 </button>
               </nav>
 
-              {/* HEADER DESKTOP (SEARCH) */}
-              <div className="hidden lg:flex sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-8 py-4 justify-between items-center">
-                   <h2 className="text-2xl font-black text-gray-900">{currentView === 'store' ? 'Tienda' : currentView === 'orders' ? 'Historial de Pedidos' : currentView === 'profile' ? 'Mi Perfil' : currentView === 'support' ? 'Ayuda' : currentView === 'favorites' ? 'Mis Favoritos' : 'Configuración'}</h2>
-                   <div className="flex items-center gap-4">
+              {/* HEADER DESKTOP */}
+              <div className="hidden lg:flex sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-10 py-5 justify-between items-center">
+                   <div>
+                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">{currentView === 'store' ? 'Tienda' : currentView === 'orders' ? 'Historial' : currentView === 'profile' ? 'Perfil' : currentView === 'support' ? 'Centro de Ayuda' : currentView === 'favorites' ? 'Favoritos' : 'Configuración'}</h2>
+                        <p className="text-slate-400 text-sm font-medium">{currentView === 'store' ? 'Explora nuestros mejores productos' : 'Administra tu cuenta y pedidos'}</p>
+                   </div>
+                   <div className="flex items-center gap-6">
                        {currentView === 'store' && (
-                           <div id="tour-search" className="relative group w-80">
-                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
-                                <input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-100/50 border border-gray-200 rounded-xl py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"/>
+                           <div id="tour-search" className="relative group w-96">
+                                <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                                <input type="text" placeholder="¿Qué se te antoja hoy?" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"/>
                            </div>
                        )}
-                       <button id="tour-cart" onClick={() => setIsCartOpen(true)} className="relative p-3 bg-gray-100 hover:bg-orange-50 rounded-xl group transition-colors flex items-center gap-2">
-                           <ShoppingCart className="w-5 h-5 text-gray-600 group-hover:text-orange-600" />
-                           <span className="font-bold text-sm text-gray-700">S/ {totalCartPrice.toFixed(2)}</span>
-                           {cart.length > 0 && (<span className="bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">{cart.reduce((acc, item) => acc + item.cantidad, 0)}</span>)}
+                       <button id="tour-cart" onClick={() => setIsCartOpen(true)} className="relative px-5 py-3 bg-slate-900 hover:bg-indigo-600 rounded-2xl group transition-all flex items-center gap-3 shadow-lg shadow-slate-200 hover:shadow-indigo-200 active:scale-95">
+                           <ShoppingCart className="w-5 h-5 text-white" />
+                           <span className="font-bold text-sm text-white">S/ {totalCartPrice.toFixed(2)}</span>
+                           {cart.length > 0 && (<span className="bg-white text-slate-900 text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full">{cart.reduce((acc, item) => acc + item.cantidad, 0)}</span>)}
                        </button>
                    </div>
               </div>
 
               {/* CONTENIDO PRINCIPAL */}
-              <main className="p-4 sm:p-8 max-w-7xl mx-auto">
-                 {/* Search móvil solo en Store */}
-                 {currentView === 'store' && (
-                     <div id="tour-search-mobile" className="lg:hidden mb-4 relative">
-                        <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
-                        <input type="text" placeholder="¿Qué se te antoja?" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white shadow-sm border border-gray-100 rounded-2xl py-3 pl-11 pr-4 text-base focus:ring-2 focus:ring-orange-500 outline-none"/>
-                     </div>
-                 )}
-                 
-                 {renderContent()}
+              <main className="p-5 sm:p-10 max-w-[1600px] mx-auto min-h-[calc(100vh-80px)]">
+                  {/* Search móvil solo en Store */}
+                  {currentView === 'store' && (
+                      <div id="tour-search-mobile" className="lg:hidden mb-6 relative">
+                         <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
+                         <input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white shadow-sm border border-slate-200 rounded-2xl py-3.5 pl-12 pr-4 text-base font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none"/>
+                      </div>
+                  )}
+                  
+                  {renderContent()}
               </main>
           </div>
       </div>
 
-      {/* --- CART SIDEBAR (Reutilizado) --- */}
+      {/* --- CART SIDEBAR --- */}
       <AnimatePresence>
         {isCartOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm" />
-            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 h-full w-full sm:w-[450px] bg-white z-[60] shadow-2xl flex flex-col">
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                <h2 className="text-2xl font-extrabold flex items-center gap-2">Mi Canasta <span className="text-base font-normal text-gray-400">({cart.length})</span></h2>
-                <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-gray-200 rounded-full transition"><X className="w-6 h-6 text-gray-500" /></button>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-slate-900/40 z-50 backdrop-blur-sm" />
+            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 h-full w-full sm:w-[480px] bg-white z-[60] shadow-2xl flex flex-col rounded-l-[32px]">
+              <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-900">Mi Canasta</h2>
+                    <p className="text-slate-500 text-sm font-medium">{cart.length} productos seleccionados</p>
+                </div>
+                <button onClick={() => setIsCartOpen(false)} className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-full transition shadow-sm"><X className="w-6 h-6 text-slate-700" /></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              
+              <div className="flex-1 overflow-y-auto p-8 space-y-5">
                 {cart.length === 0 ? (
-                   <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4"><div className="bg-gray-100 p-6 rounded-full"><ShoppingCart className="w-12 h-12 text-gray-300"/></div><p className="font-medium">Tu canasta está vacía</p><button onClick={() => setIsCartOpen(false)} className="text-orange-600 font-bold hover:underline">Ir a comprar</button></div>
+                   <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-6">
+                       <div className="bg-slate-50 p-8 rounded-full border border-slate-100 shadow-sm"><ShoppingCart className="w-16 h-16 text-slate-300"/></div>
+                       <div className="text-center">
+                           <p className="font-bold text-xl text-slate-900">Tu canasta está vacía</p>
+                           <p className="text-sm mt-2">Parece que aún no has agregado nada.</p>
+                       </div>
+                       <button onClick={() => setIsCartOpen(false)} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition">Explorar Productos</button>
+                   </div>
                 ) : cart.map((item) => (
-                    <motion.div layout key={item.id} className="flex gap-4 items-center bg-white p-3 rounded-2xl border border-gray-100 shadow-sm relative group">
-                      <div className="w-20 h-20 rounded-xl bg-gray-100 relative overflow-hidden flex-shrink-0">
-                          <div className="absolute inset-0 flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-300"/></div>
-                          {item.imagen_url && <img src={item.imagen_url} className="w-full h-full object-cover relative z-10" onError={(e) => e.currentTarget.style.display='none'} />}
+                    <motion.div layout key={item.id} className="flex gap-5 items-center bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                      <div className="w-24 h-24 rounded-xl bg-slate-50 relative overflow-hidden flex-shrink-0 border border-slate-100">
+                          {item.imagen_url ? <img src={item.imagen_url} className="w-full h-full object-cover" onError={(e) => e.currentTarget.style.display='none'} /> : <div className="absolute inset-0 flex items-center justify-center"><ImageIcon className="w-8 h-8 text-slate-300"/></div>}
                       </div>
-                      <div className="flex-1">
-                        <h4 className="font-bold text-gray-900 line-clamp-1">{item.nombre}</h4>
-                        <p className="text-xs text-gray-500 mb-2">{item.categoria}</p>
-                        <p className="text-orange-600 font-extrabold">S/ {(item.precioFinal * item.cantidad).toFixed(2)}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-bold text-indigo-500 uppercase mb-1">{item.categoria}</p>
+                        <h4 className="font-bold text-slate-900 line-clamp-1 text-lg">{item.nombre}</h4>
+                        <p className="text-slate-900 font-black mt-1 text-lg">S/ {(item.precioFinal * item.cantidad).toFixed(2)}</p>
                       </div>
-                      <div className="flex flex-col items-center gap-2 bg-gray-50 rounded-xl p-1.5">
-                        <button onClick={() => updateQuantity(item.id, 1)} className="p-1 bg-white shadow-sm rounded-lg hover:text-orange-600"><Plus className="w-3 h-3" /></button>
-                        <span className="text-xs font-bold w-4 text-center">{item.cantidad}</span>
-                        <button onClick={() => updateQuantity(item.id, -1)} className="p-1 bg-white shadow-sm rounded-lg hover:text-orange-600"><Minus className="w-3 h-3" /></button>
+                      <div className="flex flex-col items-center gap-1 bg-slate-50 rounded-xl p-1 border border-slate-100">
+                        <button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 bg-white shadow-sm rounded-lg hover:text-indigo-600 flex items-center justify-center border border-slate-100"><Plus className="w-4 h-4" /></button>
+                        <span className="text-sm font-black w-6 text-center py-1">{item.cantidad}</span>
+                        <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 bg-white shadow-sm rounded-lg hover:text-indigo-600 flex items-center justify-center border border-slate-100"><Minus className="w-4 h-4" /></button>
                       </div>
-                      <button onClick={() => removeFromCart(item.id)} className="absolute -left-2 -top-2 bg-red-100 text-red-500 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition shadow-sm hover:bg-red-500 hover:text-white"><Trash2 className="w-3 h-3" /></button>
+                      {/* BOTÓN DE BORRAR DENTRO DE LA TARJETA (ARREGLADO) */}
+                      <button onClick={() => removeFromCart(item.id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition"><Trash2 className="w-5 h-5" /></button>
                     </motion.div>
                   ))}
               </div>
               {cart.length > 0 && (
-                <div className="p-6 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-                  <div className="flex justify-between items-center mb-6 text-2xl font-black text-gray-900"><span>Total</span><span>S/ {totalCartPrice.toFixed(2)}</span></div>
-                  <button onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-all shadow-xl shadow-orange-200 active:scale-95 flex justify-center items-center gap-2">Proceder al Pago <ArrowRight className="w-5 h-5"/></button>
+                <div className="p-8 bg-white border-t border-slate-100 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10">
+                  <div className="flex justify-between items-center mb-6">
+                      <span className="text-slate-500 font-medium">Total Estimado</span>
+                      <span className="text-3xl font-black text-slate-900">S/ {totalCartPrice.toFixed(2)}</span>
+                  </div>
+                  <button onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} className="w-full bg-slate-900 text-white font-bold py-5 rounded-2xl hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200 active:scale-95 flex justify-center items-center gap-3 text-lg">
+                      Proceder al Pago <ArrowRight className="w-6 h-6"/>
+                  </button>
                 </div>
               )}
             </motion.div>
@@ -1147,128 +1204,147 @@ export default function ClientCatalog() {
         )}
       </AnimatePresence>
 
-      {/* --- CHECKOUT MODAL MEJORADO (Direcciones) --- */}
+      {/* --- CHECKOUT MODAL --- */}
       <AnimatePresence>
         {isCheckoutOpen && (
           <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCheckoutOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-8 relative z-10 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCheckoutOpen(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-0 relative z-10 max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+              
               {!orderSuccessId ? (
                 <>
-                  <h2 className="text-3xl font-black mb-1 text-gray-900">Checkout</h2>
-                  <p className="text-gray-500 mb-6 text-sm">Confirma los detalles de tu orden.</p>
-                  
-                  <p className="text-xs font-bold text-gray-400 uppercase mb-2">1. Entrega</p>
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    <button onClick={() => setDeliveryType('delivery')} className={`p-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all border ${deliveryType === 'delivery' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-gray-50 text-gray-400 border-gray-100'}`}><Bike className="w-4 h-4" /> Delivery</button>
-                    <button onClick={() => setDeliveryType('recojo')} className={`p-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all border ${deliveryType === 'recojo' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-gray-50 text-gray-400 border-gray-100'}`}><Store className="w-4 h-4" /> Recojo</button>
-                  </div>
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+                         <h2 className="text-2xl font-black text-slate-900">Finalizar Compra</h2>
+                         <button onClick={() => setIsCheckoutOpen(false)} className="p-2 bg-white border border-slate-200 rounded-full hover:bg-slate-100"><X className="w-5 h-5 text-slate-500"/></button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
+                          {/* ENTREGA */}
+                          <section>
+                              <div className="flex items-center gap-2 mb-4">
+                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">1</div>
+                                  <h3 className="font-bold text-slate-800 text-lg">Tipo de Entrega</h3>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <button onClick={() => setDeliveryType('delivery')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${deliveryType === 'delivery' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Bike className="w-6 h-6" /> Delivery (S/ 2.00)</button>
+                                <button onClick={() => setDeliveryType('recojo')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${deliveryType === 'recojo' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Store className="w-6 h-6" /> Recojo en Tienda</button>
+                              </div>
 
-                  {deliveryType === 'delivery' && (
-                      <div className="mb-6 space-y-4">
-                        {/* DIRECCIONES GUARDADAS */}
-                        {savedAddresses.length > 0 && (
-                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                                {savedAddresses.map(addr => (
-                                    <button 
-                                        key={addr.id} 
-                                        onClick={() => setAddress(addr.direccion)}
-                                        className={`px-4 py-2 rounded-lg border text-xs font-bold whitespace-nowrap flex items-center gap-2 transition-all ${address === addr.direccion ? 'bg-orange-50 border-orange-500 text-orange-700 ring-2 ring-orange-200' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                                    >
-                                        <Home className="w-3 h-3"/> {addr.alias}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+                              <AnimatePresence>
+                                {deliveryType === 'delivery' && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-4 space-y-4">
+                                        {/* SAVED ADDRESSES */}
+                                        {savedAddresses.length > 0 && (
+                                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                                {savedAddresses.map(addr => (
+                                                    <button key={addr.id} onClick={() => setAddress(addr.direccion)} className={`px-4 py-2 rounded-xl border text-xs font-bold whitespace-nowrap flex items-center gap-2 transition-all ${address === addr.direccion ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                        <Home className="w-3 h-3"/> {addr.alias}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
 
-                        <div className="relative group">
-                           <input type="text" placeholder=" " value={address} onChange={e => setAddress(e.target.value)} className={`peer w-full bg-gray-50 border border-gray-200 rounded-xl p-4 pt-5 pl-11 outline-none focus:border-orange-500 transition-all font-medium ${gpsLoading ? 'opacity-50' : ''}`} disabled={gpsLoading}/>
-                           <label className="absolute left-11 top-4 text-gray-400 text-xs font-bold uppercase transition-all peer-placeholder-shown:top-5 peer-placeholder-shown:text-base peer-focus:top-2 peer-focus:text-[10px] peer-focus:text-orange-500">Dirección de Entrega</label>
-                           <MapPin className="absolute left-4 top-5 w-5 h-5 text-gray-400"/>
-                           {gpsLoading && <Loader2 className="absolute right-4 top-5 w-5 h-5 animate-spin text-orange-500"/>}
-                        </div>
-                        
-                        <div className="flex gap-2">
-                            <button onClick={handleUseCurrentLocation} className="flex-1 py-2 bg-orange-50 text-orange-700 font-bold rounded-lg text-xs hover:bg-orange-100 border border-orange-100 flex justify-center gap-1 items-center"><LocateFixed className="w-3 h-3" /> GPS</button>
-                            <button onClick={() => setIsMapOpen(true)} className="flex-1 py-2 bg-gray-100 text-gray-700 font-bold rounded-lg text-xs hover:bg-gray-200 border border-gray-200 flex justify-center gap-1 items-center"><MapIcon className="w-3 h-3" /> Mapa</button>
-                        </div>
+                                        <div className="relative group">
+                                            <div className="absolute left-4 top-4 bg-slate-100 p-2 rounded-lg"><MapPin className="w-5 h-5 text-slate-500"/></div>
+                                            <textarea placeholder="Ingresa tu dirección exacta..." value={address} onChange={e => setAddress(e.target.value)} className={`w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 pl-16 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all font-medium min-h-[80px] resize-none ${gpsLoading ? 'opacity-50' : ''}`} disabled={gpsLoading}/>
+                                            {gpsLoading && <div className="absolute right-4 top-4"><Loader2 className="w-5 h-5 animate-spin text-indigo-500"/></div>}
+                                        </div>
+                                        
+                                        <div className="flex gap-3">
+                                            <button onClick={handleUseCurrentLocation} className="flex-1 py-3 bg-indigo-50 text-indigo-700 font-bold rounded-xl text-sm hover:bg-indigo-100 border border-indigo-100 flex justify-center gap-2 items-center transition"><LocateFixed className="w-4 h-4" /> Usar GPS</button>
+                                            <button onClick={() => setIsMapOpen(true)} className="flex-1 py-3 bg-white text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 border border-slate-200 flex justify-center gap-2 items-center transition"><MapIcon className="w-4 h-4" /> Abrir Mapa</button>
+                                        </div>
 
-                        {/* GUARDAR DIRECCION */}
-                        {address && !savedAddresses.find(a => a.direccion === address) && (
-                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 animate-in fade-in slide-in-from-top-2">
-                                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer mb-2">
-                                    <input type="checkbox" checked={showSaveAddress} onChange={(e) => setShowSaveAddress(e.target.checked)} className="rounded text-orange-600 focus:ring-orange-500"/>
-                                    Guardar esta dirección
-                                </label>
-                                {showSaveAddress && (
-                                    <input type="text" placeholder="Ej: Casa, Trabajo..." value={newAddressAlias} onChange={e => setNewAddressAlias(e.target.value)} className="w-full border rounded-lg p-2 text-sm outline-none focus:border-orange-500"/>
+                                        {/* SAVE ADDRESS OPTION */}
+                                        {address && !savedAddresses.find(a => a.direccion === address) && (
+                                            <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                                                <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer mb-2">
+                                                    <div className={`w-5 h-5 rounded border flex items-center justify-center ${showSaveAddress ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'}`}>
+                                                        {showSaveAddress && <Check className="w-3 h-3 text-white"/>}
+                                                    </div>
+                                                    <input type="checkbox" checked={showSaveAddress} onChange={(e) => setShowSaveAddress(e.target.checked)} className="hidden"/>
+                                                    Guardar esta dirección para futuros pedidos
+                                                </label>
+                                                {showSaveAddress && (
+                                                    <input type="text" placeholder="Ej: Casa, Oficina..." value={newAddressAlias} onChange={e => setNewAddressAlias(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-indigo-500"/>
+                                                )}
+                                            </div>
+                                        )}
+                                    </motion.div>
                                 )}
-                            </div>
-                        )}
-                      </div>
-                  )}
+                              </AnimatePresence>
+                          </section>
 
-                  <p className="text-xs font-bold text-gray-400 uppercase mb-2 mt-4">2. Método de Pago</p>
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    <button onClick={() => setPaymentMethod('efectivo')} className={`p-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all border ${paymentMethod === 'efectivo' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-400 border-gray-100'}`}><Banknote className="w-4 h-4" /> Efectivo</button>
-                    <button onClick={() => setPaymentMethod('yape')} className={`p-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all border ${paymentMethod === 'yape' ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-gray-50 text-gray-400 border-gray-100'}`}><Smartphone className="w-4 h-4" /> Yape/Plin</button>
-                  </div>
+                          {/* PAGO */}
+                          <section>
+                              <div className="flex items-center gap-2 mb-4 border-t border-slate-100 pt-6">
+                                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-sm">2</div>
+                                  <h3 className="font-bold text-slate-800 text-lg">Método de Pago</h3>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 mb-6">
+                                <button onClick={() => setPaymentMethod('efectivo')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${paymentMethod === 'efectivo' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Banknote className="w-6 h-6" /> Efectivo</button>
+                                <button onClick={() => setPaymentMethod('yape')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${paymentMethod === 'yape' ? 'bg-purple-50 border-purple-500 text-purple-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Smartphone className="w-6 h-6" /> Yape / Plin</button>
+                              </div>
 
-                  {paymentMethod === 'yape' && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mb-6 bg-purple-50 border border-purple-100 rounded-2xl p-4">
-                          <p className="text-xs text-purple-800 mb-2 font-medium text-center">Yapea al número:</p>
-                          <div onClick={() => {navigator.clipboard.writeText("961241085"); showToast("Copiado", 'success')}} className="bg-white border border-purple-200 rounded-xl p-3 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition active:scale-95 mb-4">
-                              <span className="text-xl font-black text-purple-700 tracking-wider">961 241 085</span>
-                              <Copy className="w-4 h-4 text-purple-400"/>
-                          </div>
-                          
-                          <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-purple-300 bg-white/50 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer hover:bg-white transition gap-2">
-                              {voucherFile ? (
-                                  <>
-                                    <div className="w-full h-32 rounded-lg overflow-hidden bg-gray-100 relative">
-                                        <img src={URL.createObjectURL(voucherFile)} className="w-full h-full object-contain" />
-                                    </div>
-                                    <p className="text-xs text-green-600 font-bold">Foto cargada</p>
-                                  </>
-                              ) : (
-                                  <>
-                                    <Upload className="w-6 h-6 text-purple-400"/>
-                                    <p className="text-xs text-purple-600 font-bold">Subir Captura (Click aquí)</p>
-                                    <p className="text-[10px] text-purple-400 text-center leading-tight">Si estás en PC y no puedes,<br/>envíala por WhatsApp al terminar.</p>
-                                  </>
-                              )}
-                          </div>
-                          <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => setVoucherFile(e.target.files?.[0] || null)}/>
-                      </motion.div>
-                  )}
+                              <AnimatePresence>
+                                {paymentMethod === 'yape' && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100 rounded-2xl p-5 shadow-inner">
+                                        <div className="text-center mb-4">
+                                            <p className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-1">Número Yape/Plin</p>
+                                            <div onClick={() => {navigator.clipboard.writeText("961241085"); showToast("Número copiado", 'success')}} className="bg-white border border-purple-100 rounded-xl py-3 px-6 inline-flex items-center gap-3 cursor-pointer hover:shadow-md transition active:scale-95">
+                                                <span className="text-2xl font-black text-slate-800 tracking-wider">961 241 085</span>
+                                                <Copy className="w-4 h-4 text-purple-500"/>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 mt-2">Titular: Jormard Store</p>
+                                        </div>
+                                        
+                                        <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-purple-300 bg-white/60 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-white transition gap-3 h-48 relative overflow-hidden group">
+                                            {voucherFile ? (
+                                                <img src={URL.createObjectURL(voucherFile)} className="absolute inset-0 w-full h-full object-contain p-2" />
+                                            ) : (
+                                                <div className="flex flex-col items-center">
+                                                    <div className="bg-purple-100 p-3 rounded-full mb-2 group-hover:scale-110 transition"><Upload className="w-6 h-6 text-purple-600"/></div>
+                                                    <p className="text-sm text-purple-900 font-bold">Subir Captura de Pago</p>
+                                                    <p className="text-xs text-slate-500">Click para seleccionar imagen</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => setVoucherFile(e.target.files?.[0] || null)}/>
+                                    </motion.div>
+                                )}
+                              </AnimatePresence>
+                          </section>
+                    </div>
 
-                  <div className="bg-gray-50 p-4 rounded-2xl mb-6">
-                      <div className="flex justify-between items-center text-sm mb-1 text-gray-500"><span>Subtotal</span><span>S/ {totalCartPrice.toFixed(2)}</span></div>
-                      {deliveryType === 'delivery' && <div className="flex justify-between items-center text-sm mb-1 text-gray-500"><span>Envío</span><span>S/ 2.00</span></div>}
-                      <div className="border-t border-gray-200 my-2 pt-2 flex justify-between items-center font-black text-xl text-gray-900"><span>Total</span><span>S/ {(totalCartPrice + (deliveryType === 'delivery' ? 2 : 0)).toFixed(2)}</span></div>
-                  </div>
-
-                  <button onClick={handlePlaceOrder} disabled={loading} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl shadow-xl hover:bg-gray-800 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {loading ? <Loader2 className="animate-spin w-5 h-5"/> : <>Confirmar Pedido <ArrowRight className="w-5 h-5" /></>}
-                  </button>
+                    <div className="p-6 border-t border-slate-100 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-20">
+                        <div className="flex justify-between items-center mb-2 text-sm text-slate-500"><span>Subtotal</span><span>S/ {totalCartPrice.toFixed(2)}</span></div>
+                        {deliveryType === 'delivery' && <div className="flex justify-between items-center mb-4 text-sm text-slate-500"><span>Envío</span><span>S/ 2.00</span></div>}
+                        <div className="flex justify-between items-center mb-6">
+                             <span className="text-lg font-bold text-slate-900">Total a Pagar</span>
+                             <span className="text-3xl font-black text-slate-900">S/ {(totalCartPrice + (deliveryType === 'delivery' ? 2 : 0)).toFixed(2)}</span>
+                        </div>
+                        <button onClick={handlePlaceOrder} disabled={loading} className="w-full bg-slate-900 text-white font-bold py-5 rounded-2xl shadow-xl hover:bg-indigo-600 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed text-lg">
+                          {loading ? <Loader2 className="animate-spin w-6 h-6"/> : <>Confirmar Pedido <CheckCircle2 className="w-6 h-6" /></>}
+                        </button>
+                    </div>
                 </>
               ) : (
-                <div className="text-center py-6">
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 className="w-12 h-12" /></motion.div>
-                  <h2 className="text-3xl font-black text-gray-900 mb-2">¡Pedido Recibido!</h2>
-                  <p className="text-gray-500 mb-6 leading-relaxed">Tu pedido #{orderSuccessId} ha sido registrado.</p>
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white">
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 10 }} className="w-32 h-32 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-8 shadow-inner"><CheckCircle2 className="w-16 h-16" /></motion.div>
+                  <h2 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">¡Pedido Exitoso!</h2>
+                  <p className="text-slate-500 mb-8 leading-relaxed text-lg">Tu pedido <span className="font-bold text-slate-900">#{orderSuccessId}</span> ha sido recibido correctamente. Pronto lo prepararemos.</p>
                   
                   {paymentMethod === 'yape' && !voucherFile && (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-6 text-left">
-                          <p className="text-sm font-bold text-yellow-800 mb-1">⚠️ Falta el comprobante</p>
-                          <p className="text-xs text-yellow-700 mb-3">Como no subiste la foto, envíala por WhatsApp para que validemos tu pago rápido.</p>
-                          <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=Hola,%20adjunto%20comprobante%20para%20el%20pedido%20%23${orderSuccessId}`, '_blank')} className="w-full py-3 bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-green-600 transition shadow-lg shadow-green-200">
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-5 mb-8 text-left w-full">
+                          <p className="text-sm font-bold text-yellow-800 mb-2 flex items-center gap-2"><Info className="w-4 h-4"/> Atención: Falta comprobante</p>
+                          <p className="text-xs text-yellow-700 mb-4 leading-relaxed">Para acelerar tu pedido, envíanos la captura de pago por WhatsApp ahora mismo.</p>
+                          <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=Hola,%20adjunto%20comprobante%20para%20el%20pedido%20%23${orderSuccessId}`, '_blank')} className="w-full py-3.5 bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-green-600 transition shadow-lg shadow-green-200">
                              <MessageCircle className="w-5 h-5"/> Enviar por WhatsApp
                           </button>
                       </div>
                   )}
 
-                  <button onClick={closeSuccessModal} className="text-gray-900 font-bold underline hover:text-orange-600">Volver a mis pedidos</button>
+                  <button onClick={closeSuccessModal} className="w-full bg-slate-100 text-slate-900 font-bold py-4 rounded-2xl hover:bg-slate-200 transition">Volver a mis pedidos</button>
                 </div>
               )}
             </motion.div>

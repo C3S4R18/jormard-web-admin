@@ -12,7 +12,7 @@ import {
   TrendingUp, Copy, Bell, LogOut, Volume2, Zap, Timer, Pencil, XCircle,
   Map, ExternalLink, HelpCircle, FileDown, ChevronRight, Flag, Image as ImageIcon, 
   Paperclip, Users, Settings, Package, ShoppingBag, ArrowRight, LayoutDashboard, Phone, Calendar,
-  Tags, Bot, MessageSquare, Sparkles, Trophy, Download, FileUp
+  Tags, Bot, MessageSquare, Sparkles, Trophy, Download, FileUp, CheckSquare, Square, FolderInput, Check
 } from 'lucide-react';
 
 // --- IMPORTACIÓN DINÁMICA DEL MAPA ---
@@ -226,7 +226,7 @@ const InventoryBot = ({ products, orders }: { products: Producto[], orders: Pedi
     );
 };
 
-// --- TOUR GUIDE MEJORADO (CON NAVEGACIÓN Y CONFETI) ---
+// --- TOUR GUIDE MEJORADO ---
 const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () => void, setView: (view: any) => void }) => {
     const [step, setStep] = useState(0);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
@@ -253,43 +253,19 @@ const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () 
             desc: "Aquí recibes las compras. ¡Vamos a ver la pantalla de pedidos!",
             targetId: 'nav-orders',
             mobileId: 'nav-orders-mobile',
-            view: 'orders' // Cambia la vista automáticamente
-        },
-        {
-            title: "Lista de Pedidos",
-            desc: "Aquí aparecerán las tarjetas de pedidos. Podrás ver si pagaron con Yape o Efectivo.",
-            targetId: null, // General focus
-            view: 'orders'
+            view: 'orders' 
         },
         { 
             title: "3. Inventario", 
             desc: "Ahora vamos a la sección más importante: Tus Productos.",
             targetId: 'nav-inventory',
             mobileId: 'nav-inventory-mobile',
-            view: 'inventory' // Cambia la vista automáticamente
+            view: 'inventory' 
         },
         {
-            title: "Crear/Editar Producto",
-            desc: "Usa este formulario. Escribe el Nombre, Precio y Stock para agregar algo nuevo.",
-            targetId: 'tour-form-basic',
-            view: 'inventory'
-        },
-        {
-            title: "¡Ofertas Flash!",
-            desc: "Activa 'Oferta Flash' para poner un precio rebajado con hora de inicio y fin. ¡Atrae clientes!",
-            targetId: 'tour-form-offer',
-            view: 'inventory'
-        },
-        {
-            title: "Foto del Producto",
-            desc: "Sube una imagen real aquí. Los productos con foto se venden un 50% más.",
-            targetId: 'tour-form-image',
-            view: 'inventory'
-        },
-        {
-            title: "Carga Masiva (Excel)",
-            desc: "Si tienes cientos de productos, no los subas uno por uno. Descarga la plantilla, llénala y súbela aquí.",
-            targetId: 'tour-excel-actions',
+            title: "Selección por Categoría (Nuevo)",
+            desc: "Ahora cada tarjeta de categoría tiene su propio botón para 'Seleccionar Todo'.",
+            targetId: 'nav-inventory',
             view: 'inventory'
         },
         { 
@@ -297,7 +273,7 @@ const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () 
             desc: "Finalmente, aquí verás tu base de datos de clientes frecuentes.",
             targetId: 'nav-customers',
             mobileId: 'nav-customers-mobile',
-            view: 'customers' // Cambia la vista automáticamente
+            view: 'customers' 
         },
         {
             title: "¡Todo Listo!",
@@ -370,7 +346,6 @@ const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () 
         if (step < steps.length - 1) {
             setStep(step + 1); 
         } else {
-            // FIN DEL TOUR
             setShowConfetti(true);
             setTimeout(() => {
                 onClose();
@@ -419,8 +394,12 @@ export default function AdminDashboard() {
   const [showGuide, setShowGuide] = useState(false); 
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'} | null>(null);
   
-  // NUEVO: Estado para categorías dinámicas
+  // Estado para categorías dinámicas
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
+
+  // NUEVO: Estado para selección múltiple
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [bulkCategory, setBulkCategory] = useState('');
 
   // Filtros
   const [orderSearch, setOrderSearch] = useState('');
@@ -507,6 +486,11 @@ export default function AdminDashboard() {
     };
   }, []);
 
+  // Limpiar selección cuando se cambia de vista
+  useEffect(() => {
+      setSelectedProductIds([]);
+  }, [currentView]);
+
   const closeTour = () => {
       setShowGuide(false);
       localStorage.setItem('hasSeenAdminTour', 'true');
@@ -518,7 +502,7 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  // NUEVO: Cargar categorías desde BD
+  // Cargar categorías desde BD
   const fetchCategories = async () => {
     const { data } = await supabase.from('categorias').select('nombre').order('nombre');
     if (data) {
@@ -526,14 +510,85 @@ export default function AdminDashboard() {
     }
   };
 
+  // 🔥 NUEVA FUNCIÓN: Sincronizar categorías "huérfanas" de productos a la BD
+  const syncCategoriesWithProducts = async (currentProducts: Producto[]) => {
+      // 1. Obtener categorías actuales de la BD
+      const { data: dbCats } = await supabase.from('categorias').select('nombre');
+      const existingNames = new Set(dbCats?.map(c => c.nombre.toLowerCase()) || []);
+
+      // 2. Buscar categorías en productos que NO estén en la BD
+      const productsCats = new Set(currentProducts.map(p => p.categoria));
+      const newCatsToInsert: string[] = [];
+
+      productsCats.forEach(cat => {
+          // Si la categoría existe y no está en la lista oficial (ignorando mayúsculas/minúsculas)
+          if (cat && !existingNames.has(cat.toLowerCase())) {
+              newCatsToInsert.push(cat); 
+          }
+      });
+
+      // 3. Insertar si hay nuevas
+      if (newCatsToInsert.length > 0) {
+          const payload = newCatsToInsert.map(nombre => ({ nombre }));
+          const { error } = await supabase.from('categorias').insert(payload);
+          
+          if (!error) {
+              await fetchCategories(); // Refrescar la lista oficial
+              showToast(`Se detectaron y agregaron ${newCatsToInsert.length} categorías nuevas automáticamente.`, 'success');
+          }
+      }
+  };
+
   const fetchProducts = async () => {
     const { data } = await supabase.from('productos').select('*').order('id', { ascending: false });
-    if (data) setProducts(data);
+    if (data) {
+        setProducts(data);
+        // 🔥 LLAMAMOS A LA SINCRONIZACIÓN AQUÍ
+        syncCategoriesWithProducts(data);
+    }
   };
 
   const fetchOrders = async () => {
     const { data } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
     if (data) setOrders(data);
+  };
+
+  // --- MANEJO DE SELECCIÓN MÚLTIPLE ---
+  const toggleSelectProduct = (id: number) => {
+      if (selectedProductIds.includes(id)) {
+          setSelectedProductIds(prev => prev.filter(pid => pid !== id));
+      } else {
+          setSelectedProductIds(prev => [...prev, id]);
+      }
+  };
+
+  const handleBulkDelete = async () => {
+      if (!confirm(`¿Estás seguro de ELIMINAR ${selectedProductIds.length} productos? Esto no se puede deshacer.`)) return;
+      
+      const { error } = await supabase.from('productos').delete().in('id', selectedProductIds);
+      if (error) {
+          showToast("Error al eliminar productos", 'error');
+      } else {
+          showToast(`Se eliminaron ${selectedProductIds.length} productos.`, 'success');
+          setSelectedProductIds([]);
+          fetchProducts();
+      }
+  };
+
+  const handleBulkCategoryUpdate = async () => {
+      if (!bulkCategory) return showToast("Selecciona una categoría primero", 'error');
+      
+      const { error } = await supabase.from('productos').update({ categoria: bulkCategory }).in('id', selectedProductIds);
+      
+      if (error) {
+          console.error(error); 
+          showToast("Error al actualizar categorías", 'error');
+      } else {
+          showToast(`Actualizados ${selectedProductIds.length} productos a "${bulkCategory}"`, 'success');
+          setSelectedProductIds([]);
+          setBulkCategory('');
+          fetchProducts();
+      }
   };
 
   // --- MANEJO DE IMÁGENES ---
@@ -963,7 +1018,7 @@ export default function AdminDashboard() {
 
          {/* Vista: Inventario (MODIFICADA: 2 Columnas MAX) */}
          {currentView === 'inventory' && (
-             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-4">
+             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-4 relative pb-20">
                  {/* COLUMNA 1: FORMULARIO */}
                  <div className="lg:col-span-1" ref={formTopRef}>
                      <div className={`bg-white p-6 rounded-3xl shadow-sm border sticky top-24 transition-colors ${editingId ? 'border-orange-400 ring-4 ring-orange-50' : 'border-slate-200'}`}>
@@ -1031,31 +1086,71 @@ export default function AdminDashboard() {
                  </div>
 
                  <div className="lg:col-span-3 space-y-8">
-                     <div className="relative">
-                        <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400"/>
-                        <input type="text" placeholder="Buscar producto por nombre..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl w-full text-base font-medium focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"/>
+                     <div className="flex gap-4 items-center">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400"/>
+                            <input type="text" placeholder="Buscar producto por nombre..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl w-full text-base font-medium focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"/>
+                        </div>
                      </div>
                      
                      {/* INVENTARIO: 2 COLUMNAS PARA MEJOR VISIBILIDAD */}
                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                        {Object.entries(groupedProducts).map(([categoria, prods]) => {
                            if (prods.length === 0) return null;
+                           
+                           // Lógica de selección por categoría
+                           const categoryIds = prods.map(p => p.id);
+                           const isAllSelected = categoryIds.length > 0 && categoryIds.every(id => selectedProductIds.includes(id));
+                           const hasSomeSelected = categoryIds.some(id => selectedProductIds.includes(id));
+
+                           const toggleCategorySelection = () => {
+                               if (isAllSelected) {
+                                   setSelectedProductIds(prev => prev.filter(id => !categoryIds.includes(id)));
+                               } else {
+                                   const toAdd = categoryIds.filter(id => !selectedProductIds.includes(id));
+                                   setSelectedProductIds(prev => [...prev, ...toAdd]);
+                               }
+                           };
+
                            return (
                              <div key={categoria} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col h-full">
-                                 <div className="flex items-center gap-3 mb-6 pb-2 border-b border-slate-50">
-                                     <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600"><Tags className="w-5 h-5"/></div>
-                                     <h3 className="font-black text-slate-800 text-xl uppercase tracking-tight">{categoria} <span className="text-slate-400 text-sm font-bold ml-2 bg-slate-100 px-2 py-0.5 rounded-full">{prods.length}</span></h3>
+                                 {/* HEADER DE CATEGORÍA CON CHECKBOX */}
+                                 <div className="flex items-center justify-between mb-6 pb-2 border-b border-slate-50">
+                                     <div className="flex items-center gap-3">
+                                         <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600"><Tags className="w-5 h-5"/></div>
+                                         <h3 className="font-black text-slate-800 text-xl uppercase tracking-tight">{categoria} <span className="text-slate-400 text-sm font-bold ml-2 bg-slate-100 px-2 py-0.5 rounded-full">{prods.length}</span></h3>
+                                     </div>
+                                     <button 
+                                        onClick={toggleCategorySelection}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAllSelected ? 'bg-indigo-600 text-white border-indigo-600' : hasSomeSelected ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'}`}
+                                     >
+                                         {isAllSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                                         {isAllSelected ? 'Todos' : 'Seleccionar'}
+                                     </button>
                                  </div>
                                  
                                  <div className="flex-1 space-y-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
                                      <AnimatePresence>
                                      {prods.map(p => (
-                                         <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-lg ${editingId === p.id ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-slate-100 bg-white hover:border-indigo-100'}`}>
-                                             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex-shrink-0 relative overflow-hidden border border-slate-100">
+                                         <motion.div 
+                                            key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} 
+                                            className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-lg relative overflow-hidden group ${
+                                                selectedProductIds.includes(p.id) ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200' : 
+                                                editingId === p.id ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-slate-100 bg-white hover:border-indigo-100'
+                                            }`}
+                                         >
+                                             {/* CHECKBOX DE SELECCIÓN INDIVIDUAL */}
+                                             <div onClick={(e) => { e.stopPropagation(); toggleSelectProduct(p.id); }} className="absolute top-0 left-0 p-2 z-10">
+                                                 <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${selectedProductIds.includes(p.id) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300 group-hover:border-indigo-300'}`}>
+                                                     {selectedProductIds.includes(p.id) && <Check size={12} className="text-white" strokeWidth={4} />}
+                                                 </div>
+                                             </div>
+
+                                             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex-shrink-0 relative overflow-hidden border border-slate-100 ml-2">
                                                  <img src={p.imagen_url} className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} />
                                                  {p.oferta_activa && <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center backdrop-blur-[1px]"><Zap className="w-6 h-6 text-white drop-shadow-md"/></div>}
                                              </div>
-                                             <div className="flex-1 min-w-0">
+                                             <div className="flex-1 min-w-0" onClick={() => handleEditClick(p)}>
                                                  <h4 className="font-bold text-slate-900 text-lg truncate" title={p.nombre}>{p.nombre}</h4>
                                                  <div className="flex justify-between items-end mt-2">
                                                      <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stock: {p.stock}</span>
@@ -1065,8 +1160,8 @@ export default function AdminDashboard() {
                                                  </div>
                                              </div>
                                              <div className="flex flex-col gap-2">
-                                                 <button onClick={() => handleEditClick(p)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors"><Pencil size={18}/></button>
-                                                 <button onClick={() => handleDeleteProduct(p.id)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"><Trash2 size={18}/></button>
+                                                 <button onClick={(e) => { e.stopPropagation(); handleEditClick(p); }} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors"><Pencil size={18}/></button>
+                                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id); }} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"><Trash2 size={18}/></button>
                                              </div>
                                          </motion.div>
                                      ))}
@@ -1083,6 +1178,39 @@ export default function AdminDashboard() {
                              <p className="text-xl font-bold text-slate-400">No hay productos que coincidan.</p>
                          </div>
                      )}
+
+                     {/* BARRA DE ACCIÓN MASIVA FLOTANTE */}
+                     <AnimatePresence>
+                        {selectedProductIds.length > 0 && (
+                            <motion.div 
+                                initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}
+                                className="fixed bottom-6 left-1/2 -translate-x-1/2 lg:left-auto lg:translate-x-0 lg:right-32 z-[80] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center gap-4 border border-slate-700 w-[90%] max-w-2xl lg:w-auto"
+                            >
+                                <div className="flex items-center gap-3 pr-4 border-b sm:border-b-0 sm:border-r border-slate-700 pb-2 sm:pb-0 w-full sm:w-auto justify-between sm:justify-start">
+                                    <span className="font-black text-lg">{selectedProductIds.length}</span>
+                                    <span className="text-xs uppercase text-slate-400 font-bold tracking-wider">Seleccionados</span>
+                                    <button onClick={() => setSelectedProductIds([])} className="text-slate-400 hover:text-white"><X size={18}/></button>
+                                </div>
+                                
+                                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                                    <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-xl w-full sm:w-auto">
+                                        <select 
+                                            value={bulkCategory} 
+                                            onChange={(e) => setBulkCategory(e.target.value)}
+                                            className="bg-transparent text-white text-sm font-bold outline-none px-3 py-2 w-full sm:w-40"
+                                        >
+                                            <option value="" className="text-slate-900">Mover a...</option>
+                                            {dynamicCategories.map(c => <option key={c} value={c} className="text-slate-900">{c}</option>)}
+                                        </select>
+                                        <button onClick={handleBulkCategoryUpdate} className="bg-indigo-600 hover:bg-indigo-500 p-2 rounded-lg transition"><FolderInput size={18}/></button>
+                                    </div>
+                                    <button onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition w-full sm:w-auto">
+                                        <Trash2 size={18}/> Eliminar
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+                     </AnimatePresence>
                  </div>
              </div>
          )}
