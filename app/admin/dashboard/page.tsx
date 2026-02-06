@@ -56,14 +56,6 @@ interface Pedido {
   metodo_pago?: string;
 }
 
-// --- CONFIG ---
-const CATEGORIAS = [
-  "Abarrotes", "Aseo y limpieza", "Bebidas", "Caramelos", "Chocolates",
-  "Cuidado personal", "Descartables y más", "Galletas", "Lácteos",
-  "Licores", "Mascotas", "Papelería", "Snacks", "Útiles escolares",
-  "Yogures", "Otros"
-];
-
 // --- COMPONENTES UI ---
 const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) => (
   <motion.div 
@@ -427,6 +419,9 @@ export default function AdminDashboard() {
   const [showGuide, setShowGuide] = useState(false); 
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'} | null>(null);
   
+  // NUEVO: Estado para categorías dinámicas
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
+
   // Filtros
   const [orderSearch, setOrderSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -519,8 +514,16 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    await Promise.all([fetchProducts(), fetchOrders()]);
+    await Promise.all([fetchProducts(), fetchOrders(), fetchCategories()]);
     setLoading(false);
+  };
+
+  // NUEVO: Cargar categorías desde BD
+  const fetchCategories = async () => {
+    const { data } = await supabase.from('categorias').select('nombre').order('nombre');
+    if (data) {
+        setDynamicCategories(data.map(c => c.nombre));
+    }
   };
 
   const fetchProducts = async () => {
@@ -652,27 +655,66 @@ export default function AdminDashboard() {
     showToast("Inventario exportado correctamente", 'success');
   };
 
+  // NUEVO: Lógica mejorada para Excel (Crea categorías y normaliza texto)
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
     const reader = new FileReader();
+    
     reader.onload = async (evt) => {
       try {
         const wb = XLSX.read(evt.target?.result, { type: 'binary' });
         const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
         
-        const formatted = data.map((row: any) => ({
-          nombre: row.nombre || row.Nombre,
-          precio: parseFloat(row.precio || row.Precio || 0),
-          stock: parseInt(row.stock || row.Stock || 0),
-          categoria: row.categoria || row.Categoria || 'General',
-          imagen_url: row.imagen_url || row.Imagen || row.imagen || '/placeholder.png'
-        }));
+        // A. Recolectar categorías
+        const potentialCategories = new Set<string>();
         
+        const formatted = data.map((row: any) => {
+          // Normalizar texto (Primera mayúscula, resto minúscula)
+          const rawCategory = (row.categoria || row.Categoria || 'Otros').toString().trim();
+          const normalizedCategory = rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1).toLowerCase();
+          
+          potentialCategories.add(normalizedCategory);
+
+          return {
+            nombre: row.nombre || row.Nombre,
+            precio: parseFloat(row.precio || row.Precio || 0),
+            stock: parseInt(row.stock || row.Stock || 0),
+            categoria: normalizedCategory, // Usamos la normalizada
+            imagen_url: row.imagen_url || row.Imagen || row.imagen || '/placeholder.png'
+          };
+        });
+
+        // B. Detectar categorías NUEVAS
+        const currentCatsLower = dynamicCategories.map(c => c.toLowerCase());
+        const newCategoriesToInsert = Array.from(potentialCategories).filter(
+          cat => !currentCatsLower.includes(cat.toLowerCase())
+        );
+
+        // C. Insertar nuevas categorías en Supabase
+        if (newCategoriesToInsert.length > 0) {
+          const catsPayload = newCategoriesToInsert.map(nombre => ({ nombre }));
+          const { error: catError } = await supabase.from('categorias').insert(catsPayload);
+          
+          if (catError) console.error("Error creando categorías:", catError);
+          else {
+            showToast(`✨ Se crearon ${newCategoriesToInsert.length} categorías nuevas`, 'success');
+            await fetchCategories(); // Recargar la lista inmediatamente
+          }
+        }
+        
+        // D. Guardar productos
         const { error } = await supabase.from('productos').upsert(formatted, { onConflict: 'nombre' });
+        
         if (error) throw error;
         showToast(`Procesados ${formatted.length} productos correctamente`, 'success');
-        fetchProducts(); 
-      } catch (error: any) { showToast("Error: " + error.message, 'error'); }
+        fetchProducts();
+        
+        if (excelInputRef.current) excelInputRef.current.value = '';
+
+      } catch (error: any) { 
+        showToast("Error: " + error.message, 'error'); 
+        if (excelInputRef.current) excelInputRef.current.value = '';
+      }
     };
     reader.readAsBinaryString(e.target.files[0]);
   };
@@ -962,7 +1004,7 @@ export default function AdminDashboard() {
                                  <label className="text-xs uppercase font-bold text-slate-400 tracking-wider">Categoría</label>
                                  <select value={newProduct.categoria} onChange={e => setNewProduct({...newProduct, categoria: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
                                      <option value="">Seleccionar...</option>
-                                     {CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                     {dynamicCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                  </select>
                              </div>
                              <div id="tour-form-image" onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 p-8 rounded-2xl text-center cursor-pointer hover:bg-indigo-50 hover:border-indigo-300 transition-all group bg-slate-50">
@@ -999,38 +1041,38 @@ export default function AdminDashboard() {
                        {Object.entries(groupedProducts).map(([categoria, prods]) => {
                            if (prods.length === 0) return null;
                            return (
-                              <div key={categoria} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col h-full">
-                                  <div className="flex items-center gap-3 mb-6 pb-2 border-b border-slate-50">
-                                      <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600"><Tags className="w-5 h-5"/></div>
-                                      <h3 className="font-black text-slate-800 text-xl uppercase tracking-tight">{categoria} <span className="text-slate-400 text-sm font-bold ml-2 bg-slate-100 px-2 py-0.5 rounded-full">{prods.length}</span></h3>
-                                  </div>
-                                  
-                                  <div className="flex-1 space-y-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
-                                      <AnimatePresence>
-                                      {prods.map(p => (
-                                          <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-lg ${editingId === p.id ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-slate-100 bg-white hover:border-indigo-100'}`}>
-                                              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex-shrink-0 relative overflow-hidden border border-slate-100">
-                                                  <img src={p.imagen_url} className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} />
-                                                  {p.oferta_activa && <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center backdrop-blur-[1px]"><Zap className="w-6 h-6 text-white drop-shadow-md"/></div>}
-                                              </div>
-                                              <div className="flex-1 min-w-0">
-                                                  <h4 className="font-bold text-slate-900 text-lg truncate" title={p.nombre}>{p.nombre}</h4>
-                                                  <div className="flex justify-between items-end mt-2">
-                                                      <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stock: {p.stock}</span>
-                                                      <div className="text-right">
-                                                          {p.oferta_activa ? <><span className="block text-xs text-slate-400 line-through font-bold">S/ {p.precio.toFixed(2)}</span><span className="font-black text-orange-600 text-xl">S/ {p.precio_oferta?.toFixed(2)}</span></> : <span className="font-black text-slate-900 text-xl">S/ {p.precio.toFixed(2)}</span>}
-                                                      </div>
-                                                  </div>
-                                              </div>
-                                              <div className="flex flex-col gap-2">
-                                                  <button onClick={() => handleEditClick(p)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors"><Pencil size={18}/></button>
-                                                  <button onClick={() => handleDeleteProduct(p.id)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"><Trash2 size={18}/></button>
-                                              </div>
-                                          </motion.div>
-                                      ))}
-                                      </AnimatePresence>
-                                  </div>
-                              </div>
+                             <div key={categoria} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col h-full">
+                                 <div className="flex items-center gap-3 mb-6 pb-2 border-b border-slate-50">
+                                     <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600"><Tags className="w-5 h-5"/></div>
+                                     <h3 className="font-black text-slate-800 text-xl uppercase tracking-tight">{categoria} <span className="text-slate-400 text-sm font-bold ml-2 bg-slate-100 px-2 py-0.5 rounded-full">{prods.length}</span></h3>
+                                 </div>
+                                 
+                                 <div className="flex-1 space-y-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
+                                     <AnimatePresence>
+                                     {prods.map(p => (
+                                         <motion.div key={p.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-lg ${editingId === p.id ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-slate-100 bg-white hover:border-indigo-100'}`}>
+                                             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex-shrink-0 relative overflow-hidden border border-slate-100">
+                                                 <img src={p.imagen_url} className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).src = '/placeholder.png'} />
+                                                 {p.oferta_activa && <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center backdrop-blur-[1px]"><Zap className="w-6 h-6 text-white drop-shadow-md"/></div>}
+                                             </div>
+                                             <div className="flex-1 min-w-0">
+                                                 <h4 className="font-bold text-slate-900 text-lg truncate" title={p.nombre}>{p.nombre}</h4>
+                                                 <div className="flex justify-between items-end mt-2">
+                                                     <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${p.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stock: {p.stock}</span>
+                                                     <div className="text-right">
+                                                         {p.oferta_activa ? <><span className="block text-xs text-slate-400 line-through font-bold">S/ {p.precio.toFixed(2)}</span><span className="font-black text-orange-600 text-xl">S/ {p.precio_oferta?.toFixed(2)}</span></> : <span className="font-black text-slate-900 text-xl">S/ {p.precio.toFixed(2)}</span>}
+                                                     </div>
+                                                 </div>
+                                             </div>
+                                             <div className="flex flex-col gap-2">
+                                                 <button onClick={() => handleEditClick(p)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors"><Pencil size={18}/></button>
+                                                 <button onClick={() => handleDeleteProduct(p.id)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"><Trash2 size={18}/></button>
+                                             </div>
+                                         </motion.div>
+                                     ))}
+                                     </AnimatePresence>
+                                 </div>
+                             </div>
                            );
                        })}
                      </div>
