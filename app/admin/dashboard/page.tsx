@@ -12,7 +12,7 @@ import {
   TrendingUp, Copy, Bell, LogOut, Volume2, Zap, Timer, Pencil, XCircle,
   Map, ExternalLink, HelpCircle, FileDown, ChevronRight, Flag, Image as ImageIcon, 
   Paperclip, Users, Settings, Package, ShoppingBag, ArrowRight, LayoutDashboard, Phone, Calendar,
-  Tags, Bot, MessageSquare, Sparkles, Trophy, Download, FileUp, CheckSquare, Square, FolderInput, Check
+  Tags, Bot, MessageSquare, Sparkles, Trophy, Download, FileUp, CheckSquare, Square, FolderInput, Check, Megaphone
 } from 'lucide-react';
 
 // --- IMPORTACIÓN DINÁMICA DEL MAPA ---
@@ -54,6 +54,7 @@ interface Pedido {
   estado: 'pendiente' | 'pagado' | 'atendido' | 'cancelado';
   comprobante_url?: string;
   metodo_pago?: string;
+  user_id?: string; // <--- ¡SOLO AGREGA ESTA LÍNEA AQUÍ!
 }
 
 // --- COMPONENTES UI ---
@@ -397,9 +398,15 @@ export default function AdminDashboard() {
   // Estado para categorías dinámicas
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
 
-  // NUEVO: Estado para selección múltiple
+  // Estado para selección múltiple
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [bulkCategory, setBulkCategory] = useState('');
+
+  // NUEVO: Estado para Notificaciones Globales (Ofertas)
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const [offerTitle, setOfferTitle] = useState('¡Nuevas Ofertas Relámpago! ⚡');
+  const [offerBody, setOfferBody] = useState('Aprovecha nuestros descuentos por tiempo limitado en la Bodega. ¡Corre que se acaban!');
+  const [sendingOffers, setSendingOffers] = useState(false);
 
   // Filtros
   const [orderSearch, setOrderSearch] = useState('');
@@ -551,6 +558,37 @@ export default function AdminDashboard() {
   const fetchOrders = async () => {
     const { data } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
     if (data) setOrders(data);
+  };
+
+  // --- NUEVO: ENVIAR NOTIFICACIÓN GLOBAL (OFERTAS) ---
+  const handleSendGlobalOffer = async () => {
+    if (!offerTitle || !offerBody) return showToast("Llena el título y el mensaje", "error");
+    setSendingOffers(true);
+    try {
+      const { data: tokens } = await supabase.from('fcm_tokens').select('token');
+      if (!tokens || tokens.length === 0) {
+        showToast("No hay clientes registrados para recibir notificaciones", "error");
+        setSendingOffers(false);
+        return;
+      }
+
+      let sentCount = 0;
+      for (const t of tokens) {
+        try {
+          await fetch('/api/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: t.token, title: offerTitle, body: offerBody })
+          });
+          sentCount++;
+        } catch (e) { console.error(e); }
+      }
+      showToast(`¡Notificación enviada a ${sentCount} clientes! 🚀`, "success");
+      setShowOfferModal(false);
+    } catch (error) {
+      showToast("Error enviando notificaciones globales", "error");
+    }
+    setSendingOffers(false);
   };
 
   // --- MANEJO DE SELECCIÓN MÚLTIPLE ---
@@ -955,7 +993,7 @@ export default function AdminDashboard() {
                  <button id="admin-menu-btn" onClick={() => setIsMobileMenuOpen(true)} className="p-2 bg-white rounded-xl shadow-sm border border-slate-200"><Menu className="w-6 h-6 text-slate-700"/></button>
                  <span className="font-extrabold text-lg text-slate-900">Bodega Jormard</span>
              </div>
-             <button onClick={() => { playNotificationSound(); showToast("Sonido OK 🔊", 'success'); }} className="p-2 bg-white rounded-full shadow-sm"><Volume2 className="w-5 h-5 text-slate-400"/></button>
+             <button onClick={() => setShowOfferModal(true)} className="p-2 bg-orange-500 rounded-full shadow-sm text-white"><Megaphone className="w-5 h-5"/></button>
          </div>
 
          {/* Vista: Dashboard */}
@@ -967,7 +1005,8 @@ export default function AdminDashboard() {
                          <p className="text-slate-500 font-medium mt-1">Aquí tienes el resumen de hoy.</p>
                      </div>
                      <div className="flex gap-2">
-                        <button onClick={() => { playNotificationSound(); showToast("Sonido OK", 'success'); }} className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 shadow-sm"><Volume2 className="w-4 h-4"/> Probar Sonido</button>
+                         <button onClick={() => setShowOfferModal(true)} className="hidden sm:flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 shadow-sm transition-all transform active:scale-95"><Megaphone className="w-4 h-4"/> Notificar Ofertas</button>
+                         <button onClick={() => { playNotificationSound(); showToast("Sonido OK", 'success'); }} className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 shadow-sm"><Volume2 className="w-4 h-4"/> Probar Sonido</button>
                      </div>
                  </div>
 
@@ -1400,7 +1439,7 @@ export default function AdminDashboard() {
                     </div>
                   )}
                   {selectedOrder.estado === 'pagado' && (
-                    <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'atendido')} className="w-full py-5 rounded-2xl bg-emerald-500 text-white font-black hover:bg-emerald-600 shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 transform active:scale-95 transition-all text-lg uppercase tracking-wide"><CheckCircle2 className="w-6 h-6" /> {selectedOrder.tipo_entrega === 'delivery' ? 'Marcar como Enviado' : 'Marcar como Entregado'}</button>
+                    <button onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'atendido', selectedOrder.user_id)} className="w-full py-5 rounded-2xl bg-emerald-500 text-white font-black hover:bg-emerald-600 shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 transform active:scale-95 transition-all text-lg uppercase tracking-wide"><CheckCircle2 className="w-6 h-6" /> {selectedOrder.tipo_entrega === 'delivery' ? 'Marcar como Enviado' : 'Marcar como Entregado'}</button>
                   )}
                   <div className="mt-6 text-center">
                     <button onClick={() => handleDeleteOrder(selectedOrder.id)} className="text-red-400 font-bold text-xs hover:text-red-600 flex items-center justify-center gap-2 mx-auto hover:bg-red-50 px-4 py-2 rounded-xl transition"><Trash2 className="w-4 h-4" /> Eliminar Definitivamente</button>
@@ -1410,6 +1449,40 @@ export default function AdminDashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* --- MODAL DE NOTIFICACIONES GLOBALES (OFERTAS) --- */}
+      <AnimatePresence>
+        {showOfferModal && (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md" onClick={() => !sendingOffers && setShowOfferModal(false)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-md rounded-[2rem] overflow-hidden shadow-2xl relative border border-white/20" onClick={e => e.stopPropagation()}>
+              <div className="bg-orange-500 p-8 text-white flex justify-between items-start">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight flex items-center gap-2"><Megaphone className="w-6 h-6"/> Enviar Notificación</h2>
+                  <p className="text-orange-100 font-medium mt-1 text-sm">Avisarás a todos tus clientes al mismo tiempo.</p>
+                </div>
+                <button onClick={() => !sendingOffers && setShowOfferModal(false)} className="bg-white/10 p-2.5 rounded-full hover:bg-white/20 transition"><X className="w-5 h-5 text-white"/></button>
+              </div>
+              <div className="p-6 space-y-4 bg-slate-50">
+                <div className="space-y-1.5">
+                  <label className="text-xs uppercase font-bold text-slate-400 tracking-wider">Título de la Notificación</label>
+                  <input type="text" value={offerTitle} onChange={e => setOfferTitle(e.target.value)} disabled={sendingOffers} className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-bold text-slate-700" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs uppercase font-bold text-slate-400 tracking-wider">Mensaje</label>
+                  <textarea value={offerBody} onChange={e => setOfferBody(e.target.value)} disabled={sendingOffers} rows={3} className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-medium text-slate-700 resize-none" />
+                </div>
+              </div>
+              <div className="p-6 bg-white border-t border-slate-100 flex gap-3">
+                <button onClick={() => setShowOfferModal(false)} disabled={sendingOffers} className="flex-1 py-4 rounded-xl border border-slate-200 font-bold text-slate-500 hover:bg-slate-50 transition-all text-sm disabled:opacity-50">Cancelar</button>
+                <button onClick={handleSendGlobalOffer} disabled={sendingOffers} className="flex-1 py-4 rounded-xl bg-orange-500 text-white font-black hover:bg-orange-600 shadow-xl shadow-orange-200 flex items-center justify-center gap-2 transform active:scale-95 transition-all text-sm disabled:opacity-50">
+                  {sendingOffers ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Zap className="w-4 h-4"/> Enviar a Todos</>}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
