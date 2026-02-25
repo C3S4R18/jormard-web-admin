@@ -775,18 +775,55 @@ export default function AdminDashboard() {
   };
 
   // --- ORDERS LOGIC ---
-  const handleUpdateOrderStatus = async (id: number, status: 'pagado' | 'atendido' | 'cancelado') => {
+  const handleUpdateOrderStatus = async (id: number, status: 'pagado' | 'atendido' | 'cancelado', userId?: string) => {
+    // 1. Actualizamos el estado en Supabase
     const { error } = await supabase.from('pedidos').update({ estado: status }).eq('id', id);
     if (error) return showToast("Error al actualizar", 'error');
     
     setOrders(prev => prev.map(o => o.id === id ? { ...o, estado: status } : o));
     if (selectedOrder) setSelectedOrder({ ...selectedOrder, estado: status });
 
+    // 2. Mensaje en pantalla del Admin
     if (status === 'atendido' || status === 'cancelado') {
       showToast(status === 'atendido' ? "¡Pedido Completado!" : "Pedido Cancelado", status === 'atendido' ? 'success' : 'error');
       setTimeout(() => setSelectedOrder(null), 300);
     } else {
       showToast("Pago Confirmado", 'success');
+    }
+
+    // --- NUEVO: ENVIAR NOTIFICACIÓN PUSH AL CLIENTE ---
+    if (userId) {
+        try {
+            // Buscamos el token del cliente en Supabase
+            const { data: tokenData } = await supabase.from('fcm_tokens').select('token').eq('user_id', userId).single();
+            
+            if (tokenData && tokenData.token) {
+                // Preparamos el mensaje según el estado
+                let title = "Actualización de Pedido 📦";
+                let body = `Tu pedido #${id} ahora está: ${status.toUpperCase()}`;
+                
+                if (status === 'atendido') {
+                    title = "¡Tu pedido está listo! 🎉";
+                    body = "Ya puedes pasar a recogerlo o está en camino a tu domicilio.";
+                } else if (status === 'pagado') {
+                    title = "¡Pago Confirmado! 💸";
+                    body = "Hemos validado tu pago. Empezaremos a preparar tu pedido.";
+                }
+
+                // Disparamos la API que acabamos de crear
+                await fetch('/api/notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: tokenData.token,
+                        title: title,
+                        body: body
+                    })
+                });
+            }
+        } catch (e) {
+            console.error("No se pudo enviar la notificación Push", e);
+        }
     }
   };
 
