@@ -245,7 +245,7 @@ const OrderCard = ({ order, onClick }: { order: Pedido, onClick: () => void }) =
           <div className="flex items-center gap-2 flex-wrap">
             {order.items.slice(0, 3).map((item, idx) => (
               <span key={idx} className="text-xs bg-white px-2.5 py-1 rounded-lg text-slate-600 font-medium border border-slate-100 shadow-sm">
-                {item.cantidad}x {item.nombre.length > 15 ? item.nombre.slice(0, 15) + '...' : item.nombre}
+                {Number(item.cantidad ?? 1) || 1}x {item.nombre.length > 15 ? item.nombre.slice(0, 15) + '...' : item.nombre}
               </span>
             ))}
             {order.items.length > 3 && (
@@ -282,6 +282,7 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, on
 }) => {
   const payment = getPaymentConfig(order.metodo_pago);
   const status = getStatusConfig(order.estado);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   // Gradiente del header según estado
   const headerBg = order.estado === 'pendiente' ? 'from-slate-900 to-slate-800' :
@@ -343,7 +344,7 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, on
             }`}>
               {order.comprobante_url ? (
                 <div className="flex items-center gap-4">
-                  <div className="h-20 w-20 rounded-xl bg-white overflow-hidden cursor-pointer shadow-sm border border-white" onClick={() => window.open(order.comprobante_url, '_blank')}>
+                  <div className="h-20 w-20 rounded-xl bg-white overflow-hidden cursor-pointer shadow-sm border border-white" onClick={() => setLightbox(order.comprobante_url!)}>
                     <img src={order.comprobante_url} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />
                   </div>
                   <div className="flex-1">
@@ -351,7 +352,7 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, on
                       <BadgeCheck className={`w-5 h-5 ${payment.color}`} />
                       <p className={`text-sm font-black ${payment.color}`}>Comprobante {payment.label}</p>
                     </div>
-                    <button onClick={() => window.open(order.comprobante_url, '_blank')} className={`text-xs ${payment.bg} ${payment.color} ${payment.border} border px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 hover:opacity-80 transition`}>
+                    <button onClick={() => setLightbox(order.comprobante_url!)} className={`text-xs ${payment.bg} ${payment.color} ${payment.border} border px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 hover:opacity-80 transition`}>
                       <Eye className="w-3.5 h-3.5" /> Ver imagen completa
                     </button>
                   </div>
@@ -408,15 +409,20 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, on
               Productos ({order.items.length})
             </p>
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-              {order.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
-                  <div className="flex items-center gap-3">
-                    <span className="bg-slate-900 text-white font-black w-8 h-8 flex items-center justify-center rounded-xl text-sm shadow-sm">{item.cantidad}</span>
-                    <span className="font-bold text-slate-700">{item.nombre}</span>
+              {order.items.map((item, idx) => {
+                // Pedidos antiguos podían venir sin "cantidad" (default omitido al serializar)
+                const qty = Number(item.cantidad ?? 1) || 1;
+                const price = Number(item.precio ?? 0) || 0;
+                return (
+                  <div key={idx} className="flex justify-between items-center p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
+                    <div className="flex items-center gap-3">
+                      <span className="bg-slate-900 text-white font-black w-8 h-8 flex items-center justify-center rounded-xl text-sm shadow-sm">{qty}</span>
+                      <span className="font-bold text-slate-700">{item.nombre}</span>
+                    </div>
+                    <span className="font-black text-slate-900 tabular-nums">S/ {(price * qty).toFixed(2)}</span>
                   </div>
-                  <span className="font-black text-slate-900 tabular-nums">S/ {(item.precio * item.cantidad).toFixed(2)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -459,6 +465,10 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, on
           </div>
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {lightbox && <ImageLightbox url={lightbox} onClose={() => setLightbox(null)} />}
+      </AnimatePresence>
     </div>
   );
 };
@@ -614,6 +624,38 @@ const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () 
 // ══════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL - AdminDashboard
 // ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// VISOR DE IMAGEN (modal, no abre pestaña nueva)
+// ══════════════════════════════════════════════════════════
+const ImageLightbox = ({ url, onClose }: { url: string, onClose: () => void }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+  }, [onClose]);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+      <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()} className="relative max-w-3xl w-full">
+        <div className="flex justify-end gap-2 mb-3">
+          <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+            className="bg-white/10 hover:bg-white/20 text-white p-2.5 rounded-full backdrop-blur-sm transition" title="Abrir original">
+            <ExternalLink className="w-5 h-5" />
+          </a>
+          <button onClick={onClose} className="bg-white/10 hover:bg-white/20 text-white p-2.5 rounded-full backdrop-blur-sm transition" title="Cerrar">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <img src={url} alt="Comprobante" className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl bg-white" />
+      </motion.div>
+    </motion.div>
+  );
+};
+
 // ══════════════════════════════════════════════════════════
 // EDITOR DE BANNER DE LA APP (dinámico)
 // ══════════════════════════════════════════════════════════

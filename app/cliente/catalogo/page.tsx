@@ -129,8 +129,32 @@ const OrderTracker = ({ order }: { order: Pedido }) => {
   );
 };
 
+// Visor de imagen en modal (no abre pestaña nueva)
+const ImageLightbox = ({ url, onClose }: { url: string, onClose: () => void }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+  }, [onClose]);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+      <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()} className="relative max-w-2xl w-full">
+        <div className="flex justify-end mb-3">
+          <button onClick={onClose} className="bg-white/10 hover:bg-white/20 text-white p-2.5 rounded-full backdrop-blur-sm transition"><X className="w-5 h-5" /></button>
+        </div>
+        <img src={url} alt="Comprobante" className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl bg-white" />
+      </motion.div>
+    </motion.div>
+  );
+};
+
 const OrderCard = ({ order, onReorder }: { order: Pedido, onReorder?: (o: Pedido) => void }) => {
   const [expanded, setExpanded] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const status = getStatusConfig(order.estado);
   const payment = getPaymentConfig(order.metodo_pago);
   const StatusIcon = status.Icon;
@@ -177,12 +201,17 @@ const OrderCard = ({ order, onReorder }: { order: Pedido, onReorder?: (o: Pedido
               <div className="bg-white p-4 rounded-2xl border border-slate-100"><OrderTracker order={order} /></div>
               <p className="text-xs font-black text-slate-400 uppercase tracking-wider pt-1">Detalle</p>
               <div className="space-y-2">
-                {order.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-sm items-center bg-white p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-700 font-medium"><span className="font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md mr-2">{item.cantidad}x</span> {item.nombre}</span>
-                    <span className="font-bold text-slate-900 tabular-nums">S/ {(item.precio * item.cantidad).toFixed(2)}</span>
-                  </div>
-                ))}
+                {order.items.map((item, idx) => {
+                  // Pedidos antiguos podían venir sin "cantidad"
+                  const qty = Number(item.cantidad ?? 1) || 1;
+                  const price = Number(item.precio ?? 0) || 0;
+                  return (
+                    <div key={idx} className="flex justify-between text-sm items-center bg-white p-3 rounded-xl border border-slate-100">
+                      <span className="text-slate-700 font-medium"><span className="font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md mr-2">{qty}x</span> {item.nombre}</span>
+                      <span className="font-bold text-slate-900 tabular-nums">S/ {(price * qty).toFixed(2)}</span>
+                    </div>
+                  );
+                })}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white p-3 rounded-xl border border-slate-100">
@@ -198,7 +227,7 @@ const OrderCard = ({ order, onReorder }: { order: Pedido, onReorder?: (o: Pedido
                 </div>
               </div>
               {order.comprobante_url && (
-                <button onClick={() => window.open(order.comprobante_url, '_blank')} className="w-full py-3 bg-white border border-indigo-100 text-indigo-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-50 transition">
+                <button onClick={(e) => { e.stopPropagation(); setLightbox(order.comprobante_url!); }} className="w-full py-3 bg-white border border-indigo-100 text-indigo-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-50 transition">
                   <ImageIcon className="w-4 h-4"/> Ver Comprobante
                 </button>
               )}
@@ -210,6 +239,10 @@ const OrderCard = ({ order, onReorder }: { order: Pedido, onReorder?: (o: Pedido
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {lightbox && <ImageLightbox url={lightbox} onClose={() => setLightbox(null)} />}
       </AnimatePresence>
     </motion.div>
   );
