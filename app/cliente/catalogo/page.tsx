@@ -893,8 +893,8 @@ export default function ClientCatalog() {
                   <section>
                     <div className="flex items-center gap-2 mb-4"><div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">1</div><h3 className="font-bold text-slate-800 text-lg">Tipo de Entrega</h3></div>
                     <div className="grid grid-cols-2 gap-4">
-                      <button onClick={() => setDeliveryType('delivery')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${deliveryType === 'delivery' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Truck className="w-6 h-6" /> Delivery (S/ 2.00)</button>
-                      <button onClick={() => setDeliveryType('recojo')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${deliveryType === 'recojo' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Store className="w-6 h-6" /> Recojo en Tienda</button>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={() => setDeliveryType('delivery')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${deliveryType === 'delivery' ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Truck className={`w-8 h-8 ${deliveryType === 'delivery' ? '' : 'text-slate-300'}`} /> Delivery <span className="text-[10px] font-medium -mt-1">S/ 2.00</span></motion.button>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={() => setDeliveryType('recojo')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 font-bold text-sm transition-all border-2 ${deliveryType === 'recojo' ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}><Store className={`w-8 h-8 ${deliveryType === 'recojo' ? '' : 'text-slate-300'}`} /> Recojo <span className="text-[10px] font-medium -mt-1">En tienda</span></motion.button>
                     </div>
                     <AnimatePresence>{deliveryType === 'delivery' && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-4 space-y-4">
                       {savedAddresses.length > 0 && (<div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{savedAddresses.map(addr => (<button key={addr.id} onClick={() => setAddress(addr.direccion)} className={`px-4 py-2 rounded-xl border text-xs font-bold whitespace-nowrap flex items-center gap-2 transition-all ${address === addr.direccion ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Home className="w-3 h-3"/> {addr.alias}</button>))}</div>)}
@@ -910,15 +910,26 @@ export default function ClientCatalog() {
                     
                     <div className="grid grid-cols-2 gap-3 mb-5">
                       {[
-                        { key: 'efectivo', label: '💵 Efectivo', sub: 'Contra entrega', color: 'green' },
-                        { key: 'yape', label: '💜 Yape', sub: 'Billetera BCP', color: 'purple' },
-                        { key: 'plin', label: '💚 Plin', sub: 'Interbank, BBVA', color: 'emerald' },
-                      ].map(m => (
-                        <button key={m.key} onClick={() => setPaymentMethod(m.key as any)} className={`p-3.5 rounded-2xl text-left transition-all border-2 ${paymentMethod === m.key ? `bg-${m.color}-50 border-${m.color}-500 text-${m.color}-700` : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>
-                          <span className="text-sm font-bold block">{m.label}</span>
-                          <span className="text-[10px] text-slate-400">{m.sub}</span>
-                        </button>
-                      ))}
+                        { key: 'efectivo', label: 'Efectivo', sub: 'Pago contra entrega', img: null, Icon: Banknote, ring: 'border-green-500 bg-green-50', text: 'text-green-700' },
+                        { key: 'yape', label: 'Yape', sub: 'Billetera BCP', img: '/yape.png', Icon: null, ring: 'border-purple-500 bg-purple-50', text: 'text-purple-700' },
+                        { key: 'plin', label: 'Plin', sub: 'Interbank, BBVA…', img: '/plin.png', Icon: null, ring: 'border-emerald-500 bg-emerald-50', text: 'text-emerald-700' },
+                      ].map(m => {
+                        const activo = paymentMethod === m.key;
+                        return (
+                          <motion.button whileTap={{ scale: 0.97 }} key={m.key} onClick={() => setPaymentMethod(m.key as any)}
+                            className={`p-3.5 rounded-2xl text-left transition-all border-2 flex items-center gap-3 ${activo ? `${m.ring} ${m.text}` : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                            <span className="w-9 h-9 flex items-center justify-center flex-shrink-0">
+                              {m.img
+                                ? <img src={m.img} alt={m.label} className="w-8 h-8 object-contain" />
+                                : m.Icon && <m.Icon className={`w-7 h-7 ${activo ? m.text : 'text-slate-400'}`} />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className={`text-sm font-bold block ${activo ? '' : 'text-slate-700'}`}>{m.label}</span>
+                              <span className="text-[10px] text-slate-400 block truncate">{m.sub}</span>
+                            </span>
+                          </motion.button>
+                        );
+                      })}
                     </div>
 
                     {/* Yape */}

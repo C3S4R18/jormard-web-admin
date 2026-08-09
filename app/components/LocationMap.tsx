@@ -62,9 +62,12 @@ export default function LocationMap({ onConfirm, onCancel }: LocationMapProps) {
     });
     mapa.current = m;
 
+    // La dirección inicial se pide de una vez, sin depender del evento 'load'
+    buscarDireccion(BODEGA.lat, BODEGA.lng);
+
     m.on('load', () => {
       setListo(true);
-      buscarDireccion(BODEGA.lat, BODEGA.lng);
+      m.resize(); // por si el contenedor terminó de medirse después
       // Marca de la bodega, como referencia
       const el = document.createElement('div');
       el.style.cssText = 'width:26px;height:26px;border-radius:50%;background:#0f172a;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px';
@@ -176,7 +179,9 @@ export default function LocationMap({ onConfirm, onCancel }: LocationMapProps) {
 
         {/* Mapa */}
         <div className="flex-1 relative">
-          <div ref={contenedor} className="absolute inset-0" />
+          {/* Altura explícita: el CSS de Mapbox fuerza position:relative en este div
+              y anula un "absolute inset-0", dejándolo con altura 0 (mapa en blanco). */}
+          <div ref={contenedor} className="w-full h-full" />
 
           {!listo && (
             <div className="absolute inset-0 bg-slate-50 flex items-center justify-center">
