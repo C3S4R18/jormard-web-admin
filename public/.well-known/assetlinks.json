@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.jormard.bodega",
+      "sha256_cert_fingerprints": [
+        "FE:BB:6F:30:9F:36:45:C1:73:FA:02:83:13:E0:FB:25:4D:6E:7E:C1:74:E0:E5:98:D0:94:4D:67:98:11:8B:40",
+        "4B:C1:0A:99:AA:55:E9:8A:1A:74:23:72:CA:6D:7F:2D:21:7F:CD:A3:20:F3:13:17:70:4D:75:F2:93:90:63:A9"
+      ]
+    }
+  }
+]

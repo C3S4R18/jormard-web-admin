@@ -12,7 +12,8 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Banknote, Smartphone, 
   Upload, MessageCircle, Copy, Menu, User, Settings, HelpCircle, Info, Camera, Edit2, PlayCircle,
   ChevronLeft, ChevronRight, Heart, Home, Star, LayoutGrid, Trophy, Flag, Check,
-  Wallet, Truck, BadgeCheck, ReceiptText, RotateCcw, ArrowUpDown, Sparkles, Flame, Megaphone
+  Wallet, Truck, BadgeCheck, ReceiptText, RotateCcw, ArrowUpDown, Sparkles, Flame, Megaphone,
+  Mic, Share2, TrendingDown, AlertTriangle, Tag
 } from 'lucide-react';
 
 const LocationMap = dynamic(() => import('@/app/components/LocationMap'), { 
@@ -21,10 +22,11 @@ const LocationMap = dynamic(() => import('@/app/components/LocationMap'), {
 });
 
 // --- TIPOS ---
-interface Producto { id: number; nombre: string; precio: number; stock: number; imagen_url: string; categoria: string; oferta_activa: boolean; precio_oferta?: number; hora_inicio?: string; hora_fin?: string; created_at?: string; ventas?: number; }
+interface Producto { id: number; nombre: string; precio: number; stock: number; imagen_url: string; categoria: string; oferta_activa: boolean; precio_oferta?: number; hora_inicio?: string; hora_fin?: string; created_at?: string; ventas?: number; precio_anterior?: number; }
 interface CartItem extends Producto { cantidad: number; precioFinal: number; }
 interface Pedido { id: number; created_at: string; total: number; estado: 'pendiente' | 'pagado' | 'preparando' | 'atendido' | 'cancelado'; items: CartItem[]; tipo_entrega: 'delivery' | 'recojo'; direccion?: string; metodo_pago?: string; comprobante_url?: string; }
 interface AppConfig { banner_activo: boolean; banner_titulo: string; banner_subtitulo: string; banner_color: string; }
+interface Resena { id?: number; producto_id: number; user_id: string; estrellas: number; comentario?: string; cliente_nombre?: string; created_at?: string; }
 interface UserAddress { id: number; alias: string; direccion: string; }
 
 const isOfferActive = (prod: Producto): boolean => {
@@ -405,6 +407,15 @@ export default function ClientCatalog() {
   const [sortOption, setSortOption] = useState<'recomendado' | 'precio_asc' | 'precio_desc' | 'nuevos' | 'vendidos'>('recomendado');
   const [soloOfertas, setSoloOfertas] = useState(false);
   const [bannerCfg, setBannerCfg] = useState<AppConfig | null>(null);
+  // Réplica de la app móvil
+  const [storeSection, setStoreSection] = useState<'todos' | 'ofertas' | 'vendidos' | 'nuevos'>('todos');
+  const [escuchando, setEscuchando] = useState(false);
+  const [resenas, setResenas] = useState<Resena[]>([]);
+  const [miEstrellas, setMiEstrellas] = useState(5);
+  const [miComentario, setMiComentario] = useState('');
+  const [mostrarFormResena, setMostrarFormResena] = useState(false);
+  const [problemasStock, setProblemasStock] = useState<{ nombre: string; disponible: number; pedido: number }[]>([]);
+  const [mostrarOnboarding, setMostrarOnboarding] = useState(false);
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'recojo'>('delivery');
   const [address, setAddress] = useState('');
   
@@ -476,7 +487,14 @@ export default function ClientCatalog() {
   const topSellers = products.filter(p => (p.ventas || 0) > 0 && p.stock > 0).sort((a, b) => (b.ventas || 0) - (a.ventas || 0)).slice(0, 12);
   const newestProducts = products.filter(p => p.stock > 0).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 12);
   const flashOffers = products.filter(p => isOfferActive(p) && p.stock > 0).slice(0, 12);
-  const showDiscovery = !searchTerm && selectedCategory === 'Todos' && !soloOfertas;
+  const showDiscovery = !searchTerm && selectedCategory === 'Todos' && !soloOfertas && storeSection === 'todos';
+
+  // Productos que se muestran según la sección activa (igual que la app móvil)
+  const sectionProducts =
+    storeSection === 'ofertas' ? flashOffers
+    : storeSection === 'vendidos' ? topSellers
+    : storeSection === 'nuevos' ? newestProducts
+    : filteredProducts;
 
   // Banner dinámico (con realtime)
   useEffect(() => {
@@ -487,6 +505,102 @@ export default function ClientCatalog() {
     load();
     const ch = supabase.channel('app-config-rt').on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, () => load()).subscribe();
     return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  // ══════════ BÚSQUEDA POR VOZ ══════════
+  const buscarPorVoz = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return showToast("Tu navegador no soporta búsqueda por voz", 'error');
+    const rec = new SR();
+    rec.lang = 'es-PE';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => setEscuchando(true);
+    rec.onend = () => setEscuchando(false);
+    rec.onerror = () => { setEscuchando(false); showToast("No se pudo escuchar, intenta de nuevo", 'error'); };
+    rec.onresult = (e: any) => {
+      const texto = e.results?.[0]?.[0]?.transcript ?? '';
+      if (texto) { setSearchTerm(texto); setSoloOfertas(false); setSelectedCategory('Todos'); showToast(`Buscando "${texto}"`, 'success'); }
+    };
+    rec.start();
+  };
+
+  // ══════════ RESEÑAS ══════════
+  const cargarResenas = async (productoId: number) => {
+    const { data } = await supabase.from('resenas').select('*').eq('producto_id', productoId).order('created_at', { ascending: false });
+    setResenas((data as Resena[]) ?? []);
+  };
+
+  const publicarResena = async () => {
+    if (!userId || !selectedProduct) return;
+    const { error } = await supabase.from('resenas').upsert({
+      producto_id: selectedProduct.id,
+      user_id: userId,
+      estrellas: miEstrellas,
+      comentario: miComentario.trim() || null,
+      cliente_nombre: userData?.nombre ?? 'Cliente',
+    }, { onConflict: 'user_id,producto_id' });
+    if (error) return showToast("No se pudo enviar tu reseña", 'error');
+    setMiComentario(''); setMostrarFormResena(false);
+    cargarResenas(selectedProduct.id);
+    showToast("¡Gracias por tu opinión! ⭐", 'success');
+  };
+
+  useEffect(() => {
+    if (selectedProduct) { cargarResenas(selectedProduct.id); setMostrarFormResena(false); setMiEstrellas(5); }
+    else setResenas([]);
+  }, [selectedProduct?.id]);
+
+  // ══════════ SUGERENCIAS Y COMPRA RÁPIDA ══════════
+  const productosHabituales = () => {
+    const conteo: Record<number, number> = {};
+    myOrders.forEach(o => o.items?.forEach(i => { conteo[i.id] = (conteo[i.id] ?? 0) + (Number(i.cantidad) || 1); }));
+    return Object.entries(conteo).sort((a, b) => b[1] - a[1]).map(([id]) => Number(id));
+  };
+
+  const sugerenciasCarrito = (() => {
+    const enCarrito = new Set(cart.map(i => i.id));
+    const disponibles = products.filter(p => p.stock > 0 && !enCarrito.has(p.id));
+    const habituales = productosHabituales().map(id => disponibles.find(p => p.id === id)).filter(Boolean) as Producto[];
+    const extra = disponibles.filter(p => !habituales.some(h => h.id === p.id)).sort((a, b) => (b.ventas || 0) - (a.ventas || 0));
+    return [...habituales, ...extra].slice(0, 6);
+  })();
+
+  const pedidoHabitual = myOrders.find(o => o.estado !== 'cancelado' && o.items?.length > 0) ?? null;
+
+  // ══════════ VALIDACIÓN DE STOCK ══════════
+  const validarStock = () => {
+    const problemas: { nombre: string; disponible: number; pedido: number }[] = [];
+    cart.forEach(item => {
+      const p = products.find(pr => pr.id === item.id);
+      if (!p || p.stock <= 0) problemas.push({ nombre: item.nombre, disponible: 0, pedido: item.cantidad });
+      else if (p.stock < item.cantidad) problemas.push({ nombre: item.nombre, disponible: p.stock, pedido: item.cantidad });
+    });
+    return problemas;
+  };
+
+  const ajustarCarritoAlStock = () => {
+    setCart(prev => prev.map(item => {
+      const p = products.find(pr => pr.id === item.id);
+      if (!p || p.stock <= 0) return null;
+      return p.stock < item.cantidad ? { ...item, cantidad: p.stock } : item;
+    }).filter(Boolean) as CartItem[]);
+    setProblemasStock([]);
+    showToast("Carrito actualizado", 'success');
+  };
+
+  // ══════════ COMPARTIR POR WHATSAPP ══════════
+  const compartirProducto = (p: Producto) => {
+    const oferta = isOfferActive(p) && p.precio_oferta;
+    const texto = oferta
+      ? `🔥 ¡OFERTA en Bodega Jormard!\n\n${p.nombre}\nAntes: S/ ${p.precio.toFixed(2)}\nAHORA: S/ ${p.precio_oferta!.toFixed(2)}\n\n👉 https://bodegajormard.com/p/${p.id}`
+      : `🛒 Mira esto en Bodega Jormard\n\n${p.nombre}\nPrecio: S/ ${p.precio.toFixed(2)}\n\n👉 https://bodegajormard.com/p/${p.id}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`, '_blank');
+  };
+
+  // ══════════ ONBOARDING (primera visita) ══════════
+  useEffect(() => {
+    if (!localStorage.getItem('onboarding_visto')) setMostrarOnboarding(true);
   }, []);
 
   // Volver a pedir
@@ -573,7 +687,7 @@ export default function ClientCatalog() {
   const renderContent = () => {
     const indexLast = currentPage * ITEMS_PER_PAGE;
     const indexFirst = indexLast - ITEMS_PER_PAGE;
-    const productsToShow = currentView === 'favorites' ? products.filter(p => favorites.includes(p.id)) : filteredProducts;
+    const productsToShow = currentView === 'favorites' ? products.filter(p => favorites.includes(p.id)) : sectionProducts;
     const currentProducts = productsToShow.slice(indexFirst, indexLast);
     const totalPages = Math.ceil(productsToShow.length / ITEMS_PER_PAGE);
 
@@ -593,31 +707,44 @@ export default function ClientCatalog() {
           </motion.div>
         )}
 
-        {/* Carruseles de descubrimiento */}
-        {currentView === 'store' && showDiscovery && flashOffers.length > 0 && (
-          <DiscoveryRow title="Ofertas Relámpago" subtitle="¡Por tiempo limitado!" Icon={Zap} accent="text-orange-500 fill-orange-500" iconBg="bg-white shadow-sm"
-            items={flashOffers} badge="OFERTA" badgeBg="bg-gradient-to-r from-orange-500 to-rose-500" onOpen={setSelectedProduct} onAdd={addToCart} highlight />
-        )}
-        {currentView === 'store' && showDiscovery && topSellers.length > 0 && (
-          <DiscoveryRow title="Más vendidos" subtitle="Lo que más piden nuestros clientes" Icon={Flame} accent="text-orange-500" iconBg="bg-orange-50"
-            items={topSellers} badge="TOP" badgeBg="bg-orange-500" onOpen={setSelectedProduct} onAdd={addToCart} />
-        )}
-        {currentView === 'store' && showDiscovery && newestProducts.length > 0 && (
-          <DiscoveryRow title="Nuevos" subtitle="Recién llegados a la bodega" Icon={Sparkles} accent="text-indigo-500" iconBg="bg-indigo-50"
-            items={newestProducts} badge="NUEVO" badgeBg="bg-indigo-500" onOpen={setSelectedProduct} onAdd={addToCart} />
+        {/* Compra rápida: repetir el pedido de siempre */}
+        {currentView === 'store' && showDiscovery && pedidoHabitual && (
+          <motion.button
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            onClick={() => handleReorder(pedidoHabitual)}
+            className="w-full mb-6 flex items-center gap-4 p-4 rounded-[24px] bg-gradient-to-r from-slate-900 to-indigo-700 text-white shadow-xl shadow-slate-200 hover:shadow-indigo-200 transition active:scale-[0.99] text-left"
+          >
+            <span className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"><RotateCcw className="w-6 h-6" /></span>
+            <span className="flex-1 min-w-0">
+              <span className="block font-black">Pide lo de siempre</span>
+              <span className="block text-xs text-white/80 truncate">
+                {pedidoHabitual.items.slice(0, 2).map(i => i.nombre).join(', ')}
+                {pedidoHabitual.items.length > 2 ? ` +${pedidoHabitual.items.length - 2} más` : ''}
+              </span>
+            </span>
+            <span className="bg-white text-indigo-700 font-black text-sm px-4 py-2 rounded-xl flex-shrink-0">Repetir</span>
+          </motion.button>
         )}
 
-        {/* Encabezado del catálogo + categorías + orden (agrupado) */}
+        {/* Encabezado de la sección + categorías + orden */}
         {currentView === 'store' && (
-          <div className="mb-6 pt-2 border-t border-slate-200/70">
-            <div className="flex items-end justify-between gap-4 mb-4 pt-6">
+          <div className="mb-6">
+            <div className="flex items-end justify-between gap-4 mb-4">
               <div>
                 <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none">
-                  {selectedCategory === 'Todos' ? 'Todos los productos' : selectedCategory}
+                  {storeSection === 'ofertas' ? 'Ofertas relámpago'
+                    : storeSection === 'vendidos' ? 'Más vendidos'
+                    : storeSection === 'nuevos' ? 'Nuevos productos'
+                    : selectedCategory === 'Todos' ? 'Todos los productos' : selectedCategory}
                 </h3>
-                <p className="text-xs font-medium text-slate-400 mt-1.5">{productsToShow.length} productos disponibles</p>
+                <p className="text-xs font-medium text-slate-400 mt-1.5">
+                  {storeSection === 'ofertas' ? 'Aprovecha antes de que se acaben'
+                    : storeSection === 'vendidos' ? 'Lo que más piden nuestros clientes'
+                    : storeSection === 'nuevos' ? 'Recién llegados a la bodega'
+                    : `${productsToShow.length} productos disponibles`}
+                </p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className={`flex items-center gap-2 flex-shrink-0 ${storeSection !== 'todos' ? 'hidden' : ''}`}>
                 <motion.button whileTap={{ scale: 0.95 }} onClick={() => setSoloOfertas(v => !v)}
                   className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all shadow-sm ${soloOfertas ? 'bg-orange-500 text-white border-orange-500 shadow-orange-200' : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300'}`}>
                   <Zap className={`w-3.5 h-3.5 ${soloOfertas ? 'fill-white' : ''}`} /> Ofertas
@@ -636,9 +763,11 @@ export default function ClientCatalog() {
                 </div>
               </div>
             </div>
-            <div id="tour-categories" className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide w-full">
-              {categories.map(cat => (<motion.button whileTap={{ scale: 0.95 }} key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all shadow-sm ${selectedCategory === cat ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'}`}>{cat}</motion.button>))}
-            </div>
+            {storeSection === 'todos' && (
+              <div id="tour-categories" className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide w-full">
+                {categories.map(cat => (<motion.button whileTap={{ scale: 0.95 }} key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all shadow-sm ${selectedCategory === cat ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'}`}>{cat}</motion.button>))}
+              </div>
+            )}
           </div>
         )}
         {currentView === 'favorites' && productsToShow.length === 0 && (<div className="text-center py-32 opacity-50 flex flex-col items-center"><Heart className="w-24 h-24 mb-6 text-slate-200"/><p className="font-bold text-xl text-slate-400">Aún no tienes favoritos</p></div>)}
@@ -688,7 +817,43 @@ export default function ClientCatalog() {
       <AnimatePresence>{toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
 
       {/* MODAL DETALLE PRODUCTO */}
-      <AnimatePresence>{selectedProduct && (<div className="fixed inset-0 z-[80] flex items-center justify-center p-4"><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProduct(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" /><motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[32px] w-full max-w-md overflow-hidden relative z-10 shadow-2xl"><button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-white/80 backdrop-blur-md p-2 rounded-full z-20 hover:bg-white shadow-sm"><X className="w-6 h-6 text-slate-700"/></button><div className="h-72 sm:h-80 bg-slate-100 relative group">{selectedProduct.imagen_url ? <img src={selectedProduct.imagen_url} className="w-full h-full object-contain p-6 transition-transform duration-700 group-hover:scale-105"/> : <div className="flex items-center justify-center h-full"><ImageIcon className="w-20 h-20 text-slate-300"/></div>}{isOfferActive(selectedProduct) && <div className="absolute bottom-4 left-4 bg-orange-500 text-white font-black px-4 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 text-xs"><Zap className="w-4 h-4 fill-white"/> OFERTA</div>}</div><div className="p-8"><div className="flex justify-between items-start mb-4"><div><p className="text-xs font-bold text-indigo-500 uppercase mb-1 tracking-wider">{selectedProduct.categoria}</p><h2 className="text-3xl font-black text-slate-900 leading-tight">{selectedProduct.nombre}</h2></div><div className="text-right">{isOfferActive(selectedProduct) && selectedProduct.precio_oferta ? (<><p className="text-sm text-slate-400 line-through">S/ {selectedProduct.precio.toFixed(2)}</p><p className="text-3xl font-black text-orange-600">S/ {selectedProduct.precio_oferta.toFixed(2)}</p></>) : <p className="text-3xl font-black text-slate-900">S/ {selectedProduct.precio.toFixed(2)}</p>}</div></div><div className="flex items-center gap-3 mb-8"><div className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 ${selectedProduct.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}><div className={`w-2 h-2 rounded-full ${selectedProduct.stock > 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>{selectedProduct.stock > 0 ? `Stock: ${selectedProduct.stock}` : 'Agotado'}</div></div><button onClick={() => { addToCart(selectedProduct); setSelectedProduct(null); }} disabled={selectedProduct.stock <= 0} className={`w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 active:scale-95 shadow-xl ${selectedProduct.stock > 0 ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-200' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>{selectedProduct.stock > 0 ? <><ShoppingCart className="w-5 h-5"/> Agregar</> : 'No Disponible'}</button></div></motion.div></div>)}</AnimatePresence>
+      <AnimatePresence>{selectedProduct && (<div className="fixed inset-0 z-[80] flex items-center justify-center p-4"><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProduct(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" /><motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[32px] w-full max-w-md overflow-hidden relative z-10 shadow-2xl"><button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-white/80 backdrop-blur-md p-2 rounded-full z-20 hover:bg-white shadow-sm"><X className="w-6 h-6 text-slate-700"/></button><div className="h-72 sm:h-80 bg-slate-100 relative group">{selectedProduct.imagen_url ? <img src={selectedProduct.imagen_url} className="w-full h-full object-contain p-6 transition-transform duration-700 group-hover:scale-105"/> : <div className="flex items-center justify-center h-full"><ImageIcon className="w-20 h-20 text-slate-300"/></div>}{isOfferActive(selectedProduct) && <div className="absolute bottom-4 left-4 bg-orange-500 text-white font-black px-4 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 text-xs"><Zap className="w-4 h-4 fill-white"/> OFERTA</div>}</div><div className="p-8"><div className="flex justify-between items-start mb-4"><div><p className="text-xs font-bold text-indigo-500 uppercase mb-1 tracking-wider">{selectedProduct.categoria}</p><h2 className="text-3xl font-black text-slate-900 leading-tight">{selectedProduct.nombre}</h2></div><div className="text-right">{isOfferActive(selectedProduct) && selectedProduct.precio_oferta ? (<><p className="text-sm text-slate-400 line-through">S/ {selectedProduct.precio.toFixed(2)}</p><p className="text-3xl font-black text-orange-600">S/ {selectedProduct.precio_oferta.toFixed(2)}</p></>) : <p className="text-3xl font-black text-slate-900">S/ {selectedProduct.precio.toFixed(2)}</p>}</div></div><div className="flex items-center gap-3 mb-8"><div className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 ${selectedProduct.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}><div className={`w-2 h-2 rounded-full ${selectedProduct.stock > 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>{selectedProduct.stock > 0 ? `Stock: ${selectedProduct.stock}` : 'Agotado'}</div></div>{selectedProduct.precio_anterior && selectedProduct.precio_anterior > selectedProduct.precio && !isOfferActive(selectedProduct) && (<div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-3 py-2 mb-5"><TrendingDown className="w-4 h-4 text-green-600"/><span className="text-xs font-bold text-green-700">¡Bajó de S/ {selectedProduct.precio_anterior.toFixed(2)} a S/ {selectedProduct.precio.toFixed(2)}!</span></div>)}
+<div className="flex gap-3"><button onClick={() => { addToCart(selectedProduct); setSelectedProduct(null); }} disabled={selectedProduct.stock <= 0} className={`flex-1 py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 active:scale-95 shadow-xl ${selectedProduct.stock > 0 ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-200' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>{selectedProduct.stock > 0 ? <><ShoppingCart className="w-5 h-5"/> Agregar</> : 'No Disponible'}</button><button onClick={() => compartirProducto(selectedProduct)} title="Compartir por WhatsApp" className="w-16 rounded-2xl bg-green-50 hover:bg-green-100 text-green-600 flex items-center justify-center transition active:scale-95 border border-green-100"><Share2 className="w-5 h-5"/></button></div>
+
+{/* OPINIONES */}
+<div className="mt-7 pt-6 border-t border-slate-100">
+  <div className="flex items-center justify-between">
+    <div>
+      <h3 className="font-black text-slate-900">Opiniones</h3>
+      {resenas.length > 0 && (<div className="flex items-center gap-1.5 mt-1">{[...Array(5)].map((_, i) => (<Star key={i} className={`w-3.5 h-3.5 ${i < Math.round(resenas.reduce((a, r) => a + r.estrellas, 0) / resenas.length) ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />))}<span className="text-xs text-slate-500 font-semibold ml-1">{(resenas.reduce((a, r) => a + r.estrellas, 0) / resenas.length).toFixed(1)} · {resenas.length} opinión{resenas.length === 1 ? '' : 'es'}</span></div>)}
+    </div>
+    <button onClick={() => setMostrarFormResena(v => !v)} className="text-sm font-bold text-indigo-600 hover:text-indigo-700">{mostrarFormResena ? 'Cancelar' : 'Escribir'}</button>
+  </div>
+
+  {mostrarFormResena && (
+    <div className="mt-4 bg-slate-50 rounded-2xl p-4">
+      <p className="text-xs font-bold text-slate-600">Tu calificación</p>
+      <div className="flex gap-1.5 mt-2">{[1,2,3,4,5].map(n => (<button key={n} onClick={() => setMiEstrellas(n)}><Star className={`w-8 h-8 transition ${n <= miEstrellas ? 'fill-amber-400 text-amber-400 scale-110' : 'text-slate-200'}`} /></button>))}</div>
+      <textarea value={miComentario} onChange={e => e.target.value.length <= 200 && setMiComentario(e.target.value)} placeholder="Cuéntanos qué te pareció (opcional)" rows={2} className="w-full mt-3 p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+      <button onClick={publicarResena} className="mt-3 w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition active:scale-[0.98]">Publicar opinión</button>
+    </div>
+  )}
+
+  <div className="mt-4 space-y-2.5">
+    {resenas.length === 0 && !mostrarFormResena ? (
+      <div className="flex items-center gap-3 bg-slate-50 rounded-2xl p-4"><MessageCircle className="w-6 h-6 text-slate-300"/><p className="text-sm text-slate-400">Sé el primero en opinar sobre este producto</p></div>
+    ) : resenas.slice(0, 4).map(r => (
+      <div key={r.id} className="bg-slate-50 rounded-2xl p-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-xs">{(r.cliente_nombre ?? 'C').charAt(0).toUpperCase()}</div>
+          <div><p className="text-sm font-bold text-slate-900">{r.cliente_nombre ?? 'Cliente'}</p><div className="flex">{[...Array(5)].map((_, i) => (<Star key={i} className={`w-3 h-3 ${i < r.estrellas ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />))}</div></div>
+        </div>
+        {r.comentario && <p className="text-sm text-slate-600 mt-2.5 leading-relaxed">{r.comentario}</p>}
+      </div>
+    ))}
+  </div>
+</div>
+</div></motion.div></div>)}</AnimatePresence>
 
       {/* SIDEBAR MOBILE */}
       <AnimatePresence>{isMenuOpen && (<><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsMenuOpen(false)} className="fixed inset-0 bg-slate-900/60 z-40 backdrop-blur-sm lg:hidden" /><motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="fixed left-0 top-0 h-full w-[300px] bg-white z-50 shadow-2xl flex flex-col lg:hidden rounded-r-[32px]"><div className="p-8 bg-slate-900 text-white relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full blur-3xl -mr-10 -mt-10 opacity-50"></div><div className="flex items-center gap-4 mb-4 relative z-10"><div className="w-14 h-14 rounded-full bg-white p-1 shadow-lg"><div className="w-full h-full rounded-full bg-slate-100 overflow-hidden flex items-center justify-center">{userData?.avatar_url ? <img src={userData.avatar_url} className="w-full h-full object-cover"/> : <span className="font-black text-2xl text-slate-900">{userData?.nombre.charAt(0)}</span>}</div></div><div><h3 className="font-bold text-lg leading-tight">{userData?.nombre}</h3><p className="text-xs text-slate-400">Cliente VIP</p></div></div></div><nav className="flex-1 p-6 space-y-2 overflow-y-auto"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ml-2">Menú</p><button id="nav-store-mobile" onClick={() => { setCurrentView('store'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold ${currentView === 'store' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}><Store className="w-5 h-5"/> Tienda</button><button id="nav-favorites-mobile" onClick={() => { setCurrentView('favorites'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold ${currentView === 'favorites' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}><Heart className="w-5 h-5"/> Favoritos</button><button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold ${currentView === 'orders' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}><Clock className="w-5 h-5"/> Pedidos</button><button id="nav-profile-mobile" onClick={() => { setCurrentView('profile'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold ${currentView === 'profile' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}><User className="w-5 h-5"/> Perfil</button><div className="my-6 border-t border-slate-100"></div><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ml-2">Otros</p><button onClick={() => { setCurrentView('settings'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold ${currentView === 'settings' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}><Settings className="w-5 h-5"/> Ajustes</button><button onClick={() => { setCurrentView('support'); setIsMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold ${currentView === 'support' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}><HelpCircle className="w-5 h-5"/> Ayuda</button><button onClick={() => { setIsMenuOpen(false); setShowTour(true); }} className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold text-slate-600 hover:bg-slate-50"><PlayCircle className="w-5 h-5"/> Tutorial</button></nav><div className="p-6 border-t border-slate-100"><button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-4 rounded-2xl bg-red-50 text-red-600 font-bold hover:bg-red-100"><LogOut className="w-5 h-5"/> Cerrar Sesión</button></div></motion.div></>)}</AnimatePresence>
@@ -703,13 +868,13 @@ export default function ClientCatalog() {
 
         <div className="flex-1 min-h-screen relative">
           <nav className="bg-white/80 backdrop-blur-xl sticky top-0 z-30 border-b border-slate-100 px-5 py-4 flex lg:hidden items-center justify-between"><div className="flex items-center gap-4"><button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-slate-700 hover:bg-slate-100 rounded-xl"><Menu className="w-6 h-6"/></button><h1 className="font-black text-xl text-slate-900 tracking-tight">{currentView === 'store' ? 'Jormard' : currentView === 'orders' ? 'Pedidos' : 'Bodega'}</h1></div><button id="tour-cart-mobile" onClick={() => setIsCartOpen(true)} className="relative p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl group"><ShoppingCart className="w-5 h-5 text-slate-700 group-hover:text-indigo-600" />{cart.length > 0 && (<span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md ring-2 ring-white">{cart.reduce((a, i) => a + i.cantidad, 0)}</span>)}</button></nav>
-          <div className="hidden lg:flex sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-10 py-5 justify-between items-center"><div><h2 className="text-3xl font-black text-slate-900 tracking-tight">{currentView === 'store' ? 'Tienda' : currentView === 'orders' ? 'Historial' : currentView === 'favorites' ? 'Favoritos' : 'Cuenta'}</h2><p className="text-slate-400 text-sm font-medium">{currentView === 'store' ? 'Explora nuestros productos' : 'Tu cuenta'}</p></div><div className="flex items-center gap-6">{currentView === 'store' && (<div id="tour-search" className="relative group w-96"><Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" /><input type="text" placeholder="¿Qué se te antoja?" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none"/></div>)}<button id="tour-cart" onClick={() => setIsCartOpen(true)} className="relative px-5 py-3 bg-slate-900 hover:bg-indigo-600 rounded-2xl group transition-all flex items-center gap-3 shadow-lg shadow-slate-200 hover:shadow-indigo-200 active:scale-95"><ShoppingCart className="w-5 h-5 text-white" /><span className="font-bold text-sm text-white">S/ {totalCartPrice.toFixed(2)}</span>{cart.length > 0 && (<span className="bg-white text-slate-900 text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full">{cart.reduce((a, i) => a + i.cantidad, 0)}</span>)}</button></div></div>
-          <main className="p-5 sm:p-10 max-w-[1600px] mx-auto min-h-[calc(100vh-80px)]">{currentView === 'store' && (<div id="tour-search-mobile" className="lg:hidden mb-6 relative"><Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" /><input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white shadow-sm border border-slate-200 rounded-2xl py-3.5 pl-12 pr-4 text-base font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none"/></div>)}{renderContent()}</main>
+          <div className="hidden lg:flex sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-10 py-5 justify-between items-center"><div><h2 className="text-3xl font-black text-slate-900 tracking-tight">{currentView === 'store' ? 'Tienda' : currentView === 'orders' ? 'Historial' : currentView === 'favorites' ? 'Favoritos' : 'Cuenta'}</h2><p className="text-slate-400 text-sm font-medium">{currentView === 'store' ? 'Explora nuestros productos' : 'Tu cuenta'}</p></div><div className="flex items-center gap-6">{currentView === 'store' && (<div id="tour-search" className="relative group w-96"><Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" /><input type="text" placeholder="¿Qué se te antoja?" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-14 text-sm font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none"/><button onClick={buscarPorVoz} title="Buscar por voz" className={`absolute right-2 top-1.5 w-9 h-9 rounded-full flex items-center justify-center transition ${escuchando ? 'bg-red-500 text-white animate-pulse' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><Mic className="w-4 h-4"/></button></div>)}<button id="tour-cart" onClick={() => setIsCartOpen(true)} className="relative px-5 py-3 bg-slate-900 hover:bg-indigo-600 rounded-2xl group transition-all flex items-center gap-3 shadow-lg shadow-slate-200 hover:shadow-indigo-200 active:scale-95"><ShoppingCart className="w-5 h-5 text-white" /><span className="font-bold text-sm text-white">S/ {totalCartPrice.toFixed(2)}</span>{cart.length > 0 && (<span className="bg-white text-slate-900 text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full">{cart.reduce((a, i) => a + i.cantidad, 0)}</span>)}</button></div></div>
+          <main className="p-5 sm:p-10 max-w-[1600px] mx-auto min-h-[calc(100vh-80px)]">{currentView === 'store' && (<div id="tour-search-mobile" className="lg:hidden mb-6 relative"><Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" /><input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white shadow-sm border border-slate-200 rounded-2xl py-3.5 pl-12 pr-14 text-base font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none"/><button onClick={buscarPorVoz} title="Buscar por voz" className={`absolute right-2 top-2 w-10 h-10 rounded-full flex items-center justify-center transition ${escuchando ? 'bg-red-500 text-white animate-pulse' : 'bg-indigo-50 text-indigo-600'}`}><Mic className="w-5 h-5"/></button></div>)}{renderContent()}</main>
         </div>
       </div>
 
       {/* CART SIDEBAR */}
-      <AnimatePresence>{isCartOpen && (<><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-slate-900/40 z-50 backdrop-blur-sm" /><motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 h-full w-full sm:w-[480px] bg-white z-[60] shadow-2xl flex flex-col rounded-l-[32px]"><div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50"><div><h2 className="text-2xl font-black text-slate-900">Mi Canasta</h2><p className="text-slate-500 text-sm font-medium">{cart.length} productos</p></div><button onClick={() => setIsCartOpen(false)} className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-full shadow-sm"><X className="w-6 h-6 text-slate-700" /></button></div><div className="flex-1 overflow-y-auto p-8 space-y-5">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-6"><div className="bg-slate-50 p-8 rounded-full border border-slate-100 shadow-sm"><ShoppingCart className="w-16 h-16 text-slate-300"/></div><div className="text-center"><p className="font-bold text-xl text-slate-900">Tu canasta está vacía</p><p className="text-sm mt-2">Agrega productos desde la tienda.</p></div><button onClick={() => setIsCartOpen(false)} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700">Explorar</button></div>) : cart.map(item => (<motion.div layout key={item.id} className="flex gap-5 items-center bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"><div className="w-24 h-24 rounded-xl bg-slate-50 relative overflow-hidden flex-shrink-0 border border-slate-100">{item.imagen_url ? <img src={item.imagen_url} className="w-full h-full object-cover" onError={e => e.currentTarget.style.display='none'} /> : <div className="absolute inset-0 flex items-center justify-center"><ImageIcon className="w-8 h-8 text-slate-300"/></div>}</div><div className="flex-1 min-w-0"><p className="text-[10px] font-bold text-indigo-500 uppercase mb-1">{item.categoria}</p><h4 className="font-bold text-slate-900 line-clamp-1 text-lg">{item.nombre}</h4><p className="text-slate-900 font-black mt-1 text-lg">S/ {(item.precioFinal * item.cantidad).toFixed(2)}</p></div><div className="flex flex-col items-center gap-1 bg-slate-50 rounded-xl p-1 border border-slate-100"><button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 bg-white shadow-sm rounded-lg hover:text-indigo-600 flex items-center justify-center border border-slate-100"><Plus className="w-4 h-4" /></button><span className="text-sm font-black w-6 text-center py-1">{item.cantidad}</span><button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 bg-white shadow-sm rounded-lg hover:text-indigo-600 flex items-center justify-center border border-slate-100"><Minus className="w-4 h-4" /></button></div><button onClick={() => removeFromCart(item.id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl"><Trash2 className="w-5 h-5" /></button></motion.div>))}</div>{cart.length > 0 && (<div className="p-8 bg-white border-t border-slate-100 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10"><div className="flex justify-between items-center mb-6"><span className="text-slate-500 font-medium">Total</span><span className="text-3xl font-black text-slate-900">S/ {totalCartPrice.toFixed(2)}</span></div><button onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} className="w-full bg-slate-900 text-white font-bold py-5 rounded-2xl hover:bg-indigo-600 shadow-xl shadow-slate-200 active:scale-95 flex justify-center items-center gap-3 text-lg">Pagar <ArrowRight className="w-6 h-6"/></button></div>)}</motion.div></>)}</AnimatePresence>
+      <AnimatePresence>{isCartOpen && (<><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-slate-900/40 z-50 backdrop-blur-sm" /><motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 h-full w-full sm:w-[480px] bg-white z-[60] shadow-2xl flex flex-col rounded-l-[32px]"><div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50"><div><h2 className="text-2xl font-black text-slate-900">Mi Canasta</h2><p className="text-slate-500 text-sm font-medium">{cart.length} productos</p></div><button onClick={() => setIsCartOpen(false)} className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-full shadow-sm"><X className="w-6 h-6 text-slate-700" /></button></div><div className="flex-1 overflow-y-auto p-8 space-y-5">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-6"><div className="bg-slate-50 p-8 rounded-full border border-slate-100 shadow-sm"><ShoppingCart className="w-16 h-16 text-slate-300"/></div><div className="text-center"><p className="font-bold text-xl text-slate-900">Tu canasta está vacía</p><p className="text-sm mt-2">Agrega productos desde la tienda.</p></div><button onClick={() => setIsCartOpen(false)} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700">Explorar</button></div>) : cart.map(item => (<motion.div layout key={item.id} className="flex gap-5 items-center bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"><div className="w-24 h-24 rounded-xl bg-slate-50 relative overflow-hidden flex-shrink-0 border border-slate-100">{item.imagen_url ? <img src={item.imagen_url} className="w-full h-full object-cover" onError={e => e.currentTarget.style.display='none'} /> : <div className="absolute inset-0 flex items-center justify-center"><ImageIcon className="w-8 h-8 text-slate-300"/></div>}</div><div className="flex-1 min-w-0"><p className="text-[10px] font-bold text-indigo-500 uppercase mb-1">{item.categoria}</p><h4 className="font-bold text-slate-900 line-clamp-1 text-lg">{item.nombre}</h4><p className="text-slate-900 font-black mt-1 text-lg">S/ {(item.precioFinal * item.cantidad).toFixed(2)}</p></div><div className="flex flex-col items-center gap-1 bg-slate-50 rounded-xl p-1 border border-slate-100"><button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 bg-white shadow-sm rounded-lg hover:text-indigo-600 flex items-center justify-center border border-slate-100"><Plus className="w-4 h-4" /></button><span className="text-sm font-black w-6 text-center py-1">{item.cantidad}</span><button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 bg-white shadow-sm rounded-lg hover:text-indigo-600 flex items-center justify-center border border-slate-100"><Minus className="w-4 h-4" /></button></div><button onClick={() => removeFromCart(item.id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl"><Trash2 className="w-5 h-5" /></button></motion.div>))}</div>{cart.length > 0 && sugerenciasCarrito.length > 0 && (<div className="px-8 pb-6"><div className="flex items-center gap-2 mb-3"><Plus className="w-4 h-4 text-indigo-500"/><div><p className="font-black text-slate-900 text-sm">¿Te falta algo?</p><p className="text-[11px] text-slate-400">Lo que sueles llevar</p></div></div><div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">{sugerenciasCarrito.map(p => { const of = isOfferActive(p); const pr = (of && p.precio_oferta) ? p.precio_oferta : p.precio; return (<button key={p.id} onClick={() => addToCart(p)} className="w-[112px] flex-shrink-0 bg-white rounded-2xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition text-left overflow-hidden group"><div className="h-[76px] bg-slate-50 relative flex items-center justify-center">{p.imagen_url ? <img src={p.imagen_url} className="w-full h-full object-contain p-2"/> : <ImageIcon className="w-6 h-6 text-slate-200"/>}<span className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-slate-900 group-hover:bg-indigo-600 text-white flex items-center justify-center shadow"><Plus className="w-3.5 h-3.5"/></span></div><div className="p-2"><p className="text-[10px] font-medium text-slate-600 line-clamp-2 leading-tight min-h-[24px]">{p.nombre}</p><p className={`text-xs font-black mt-1 ${of ? 'text-orange-600' : 'text-slate-900'}`}>S/ {pr.toFixed(2)}</p></div></button>); })}</div></div>)}{cart.length > 0 && (<div className="p-8 bg-white border-t border-slate-100 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10"><div className="flex justify-between items-center mb-6"><span className="text-slate-500 font-medium">Total</span><span className="text-3xl font-black text-slate-900">S/ {totalCartPrice.toFixed(2)}</span></div><button onClick={() => { const probs = validarStock(); if (probs.length > 0) { setProblemasStock(probs); return; } setIsCartOpen(false); setIsCheckoutOpen(true); }} className="w-full bg-slate-900 text-white font-bold py-5 rounded-2xl hover:bg-indigo-600 shadow-xl shadow-slate-200 active:scale-95 flex justify-center items-center gap-3 text-lg">Pagar <ArrowRight className="w-6 h-6"/></button></div>)}</motion.div></>)}</AnimatePresence>
 
       {/* ══════════════════════════════════════════════════════════ */}
       {/* CHECKOUT MODAL (3 PAGOS: EFECTIVO, YAPE, PLIN) */}
@@ -803,6 +968,115 @@ export default function ClientCatalog() {
         )}
       </AnimatePresence>
 
+      {/* AVISO DE STOCK */}
+      <AnimatePresence>
+        {problemasStock.length > 0 && (
+          <div className="fixed inset-0 z-[190] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setProblemasStock([])} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} className="relative bg-white rounded-[28px] w-full max-w-sm p-7 shadow-2xl">
+              <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center mx-auto"><AlertTriangle className="w-7 h-7 text-amber-500" /></div>
+              <h3 className="text-xl font-black text-slate-900 text-center mt-4">Cambios en tu carrito</h3>
+              <p className="text-sm text-slate-500 text-center mt-1.5">Mientras comprabas, cambió la disponibilidad:</p>
+              <div className="mt-4 space-y-2 max-h-52 overflow-y-auto">
+                {problemasStock.map((p, i) => (
+                  <div key={i} className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+                    {p.disponible === 0 ? <X className="w-4 h-4 text-red-500 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 truncate">{p.nombre}</p>
+                      <p className="text-[11px] text-slate-500">{p.disponible === 0 ? 'Se agotó' : `Solo quedan ${p.disponible} (pediste ${p.pedido})`}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={ajustarCarritoAlStock} className="mt-5 w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-indigo-600 text-white font-bold shadow-lg transition active:scale-[0.98]">Ajustar carrito</button>
+              <button onClick={() => setProblemasStock([])} className="mt-2 w-full py-3 text-slate-500 font-bold text-sm hover:text-slate-700">Revisar</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* BARRA DE SECCIONES (igual que la app móvil) */}
+      {currentView === 'store' && !isCartOpen && !isCheckoutOpen && !selectedProduct && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[45] w-[calc(100%-2rem)] max-w-md lg:max-w-lg">
+          <div className="bg-white/95 backdrop-blur-xl rounded-[26px] shadow-2xl shadow-slate-300/50 border border-slate-100 px-1.5 py-2 flex">
+            {([
+              { key: 'todos', label: 'Todos', Icon: LayoutGrid },
+              { key: 'ofertas', label: 'Ofertas', Icon: Tag },
+              { key: 'vendidos', label: 'Top', Icon: Flame },
+              { key: 'nuevos', label: 'Nuevos', Icon: Sparkles },
+            ] as const).map(s => {
+              const activo = storeSection === s.key;
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => { setStoreSection(s.key); setCurrentPage(1); }}
+                  className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-[18px] transition-all ${activo ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                >
+                  <span className="relative">
+                    <s.Icon className={`w-[22px] h-[22px] transition-colors ${activo ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    {s.key === 'ofertas' && flashOffers.length > 0 && (
+                      <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center ring-2 ring-white">
+                        {flashOffers.length > 9 ? '9+' : flashOffers.length}
+                      </span>
+                    )}
+                  </span>
+                  <span className={`text-[11px] transition-colors ${activo ? 'font-black text-indigo-600' : 'font-bold text-slate-400'}`}>{s.label}</span>
+                  <span className={`h-[3px] rounded-full transition-all ${activo ? 'w-4 bg-indigo-600' : 'w-0 bg-transparent'}`} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ONBOARDING (primera visita) */}
+      <AnimatePresence>
+        {mostrarOnboarding && (
+          <OnboardingWeb onFinish={() => { localStorage.setItem('onboarding_visto', '1'); setMostrarOnboarding(false); }} />
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
+
+// ══════════════════════════════════════════════════════════
+// ONBOARDING WEB (3 pantallas, primera visita)
+// ══════════════════════════════════════════════════════════
+const OnboardingWeb = ({ onFinish }: { onFinish: () => void }) => {
+  const [paso, setPaso] = useState(0);
+  const pasos = [
+    { Icon: Store, titulo: "Explora la tienda", detalle: "Cientos de productos a un clic. Busca por voz, filtra por categoría o mira las ofertas del día." },
+    { Icon: ShoppingCart, titulo: "Arma tu pedido", detalle: "Agrega lo que necesites, elige delivery o recojo, y paga con Yape, Plin o efectivo." },
+    { Icon: Truck, titulo: "Sigue tu pedido", detalle: "Te avisamos cuando confirmemos tu pago y cuando salga tu entrega. Todo en tiempo real." },
+  ];
+  const p = pasos[paso];
+  const ultimo = paso === pasos.length - 1;
+
+  return (
+    <div className="fixed inset-0 z-[280] flex items-center justify-center p-5">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-white" />
+      <motion.div initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} className="relative w-full max-w-sm text-center">
+        <button onClick={onFinish} className="absolute -top-2 right-0 text-slate-400 font-bold text-sm hover:text-slate-600 px-3 py-2">Saltar</button>
+        <motion.div key={paso} initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="flex flex-col items-center pt-10">
+          <div className="w-40 h-40 rounded-full bg-gradient-to-br from-indigo-50 to-white shadow-xl shadow-indigo-100 flex items-center justify-center">
+            <p.Icon className="w-20 h-20 text-indigo-600" strokeWidth={1.5} />
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 mt-9">{p.titulo}</h2>
+          <p className="text-slate-500 mt-3 leading-relaxed px-2">{p.detalle}</p>
+        </motion.div>
+        <div className="flex justify-center gap-2 mt-10">
+          {pasos.map((_, i) => (
+            <div key={i} className={`h-2 rounded-full transition-all ${i === paso ? 'w-7 bg-indigo-600' : 'w-2 bg-slate-200'}`} />
+          ))}
+        </div>
+        <button
+          onClick={() => ultimo ? onFinish() : setPaso(paso + 1)}
+          className="mt-8 w-full py-4 rounded-2xl bg-slate-900 hover:bg-indigo-600 text-white font-bold shadow-xl shadow-slate-200 transition active:scale-[0.98] flex items-center justify-center gap-2"
+        >
+          {ultimo ? '¡Empezar a comprar!' : 'Siguiente'} <ArrowRight className="w-5 h-5" />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
