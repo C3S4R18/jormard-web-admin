@@ -813,7 +813,7 @@ export default function ClientCatalog() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-200">
       <AnimatePresence>{showTour && <TourGuide isOpen={showTour} onClose={closeTour} setCurrentView={setCurrentView} setIsCartOpen={setIsCartOpen} />}</AnimatePresence>
-      {isMapOpen && <LocationMap onConfirm={(lat: number, lng: number) => { setIsMapOpen(false); fetchAddressFromCoords(lat, lng); }} onCancel={() => setIsMapOpen(false)} />}
+      {isMapOpen && <LocationMap onConfirm={(lat: number, lng: number, dir?: string) => { setIsMapOpen(false); if (dir) { setAddress(dir); showToast("Ubicación confirmada 📍", 'success'); } else { fetchAddressFromCoords(lat, lng); } }} onCancel={() => setIsMapOpen(false)} />}
       <AnimatePresence>{toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
 
       {/* MODAL DETALLE PRODUCTO */}
