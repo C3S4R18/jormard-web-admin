@@ -52,7 +52,7 @@ interface Pedido {
   direccion: string;
   items: PedidoItem[];
   total: number;
-  estado: 'pendiente' | 'pagado' | 'atendido' | 'cancelado';
+  estado: 'pendiente' | 'pagado' | 'preparando' | 'atendido' | 'cancelado';
   comprobante_url?: string;
   metodo_pago?: string;
   user_id?: string;
@@ -79,6 +79,8 @@ const getStatusConfig = (estado: string) => {
       return { label: 'Pendiente', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500' };
     case 'pagado':
       return { label: 'Pagado', color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-200', dot: 'bg-indigo-500' };
+    case 'preparando':
+      return { label: 'Preparando', color: 'text-sky-700', bg: 'bg-sky-50', border: 'border-sky-200', dot: 'bg-sky-500' };
     case 'atendido':
       return { label: 'Entregado', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' };
     case 'cancelado':
@@ -200,8 +202,9 @@ const OrderCard = ({ order, onClick }: { order: Pedido, onClick: () => void }) =
     >
       {/* Barra superior de estado */}
       <div className={`h-1.5 w-full ${status.dot.replace('bg-', 'bg-')}`} 
-        style={{ background: order.estado === 'pendiente' ? 'linear-gradient(90deg, #F59E0B, #EF4444)' : 
+        style={{ background: order.estado === 'pendiente' ? 'linear-gradient(90deg, #F59E0B, #EF4444)' :
           order.estado === 'pagado' ? 'linear-gradient(90deg, #6366F1, #8B5CF6)' :
+          order.estado === 'preparando' ? 'linear-gradient(90deg, #0EA5E9, #6366F1)' :
           order.estado === 'atendido' ? 'linear-gradient(90deg, #10B981, #059669)' :
           '#EF4444'
         }}
@@ -272,7 +275,7 @@ const OrderCard = ({ order, onClick }: { order: Pedido, onClick: () => void }) =
 const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, onOpenMap }: {
   order: Pedido,
   onClose: () => void,
-  onUpdateStatus: (id: number, status: 'pagado' | 'atendido' | 'cancelado', userId?: string) => void,
+  onUpdateStatus: (id: number, status: 'pagado' | 'preparando' | 'atendido' | 'cancelado', userId?: string) => void,
   onDelete: (id: number) => void,
   onCopy: (text: string) => void,
   onOpenMap: (address: string) => void
@@ -283,6 +286,7 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, on
   // Gradiente del header según estado
   const headerBg = order.estado === 'pendiente' ? 'from-slate-900 to-slate-800' :
     order.estado === 'pagado' ? 'from-indigo-600 to-violet-600' :
+    order.estado === 'preparando' ? 'from-sky-600 to-indigo-600' :
     order.estado === 'atendido' ? 'from-emerald-600 to-teal-600' :
     'from-red-600 to-red-500';
 
@@ -439,6 +443,11 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus, onDelete, onCopy, on
             </div>
           )}
           {order.estado === 'pagado' && (
+            <button onClick={() => onUpdateStatus(order.id, 'preparando', order.user_id)} className="w-full py-5 rounded-2xl bg-sky-500 text-white font-black hover:bg-sky-600 shadow-xl shadow-sky-200 flex items-center justify-center gap-3 active:scale-[0.98] transition-all text-lg uppercase tracking-wide">
+              <Package className="w-6 h-6" /> Marcar como Preparando
+            </button>
+          )}
+          {order.estado === 'preparando' && (
             <button onClick={() => onUpdateStatus(order.id, 'atendido', order.user_id)} className="w-full py-5 rounded-2xl bg-emerald-500 text-white font-black hover:bg-emerald-600 shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 active:scale-[0.98] transition-all text-lg uppercase tracking-wide">
               <CheckCircle2 className="w-6 h-6" /> {order.tipo_entrega === 'delivery' ? 'Marcar como Enviado' : 'Marcar como Entregado'}
             </button>
@@ -466,6 +475,7 @@ const OrderFilters = ({ activeFilter, onFilterChange, orders }: {
     { key: 'todos', label: 'Todos', count: orders.length },
     { key: 'pendiente', label: 'Pendientes', count: orders.filter(o => o.estado === 'pendiente').length },
     { key: 'pagado', label: 'Pagados', count: orders.filter(o => o.estado === 'pagado').length },
+    { key: 'preparando', label: 'Preparando', count: orders.filter(o => o.estado === 'preparando').length },
     { key: 'atendido', label: 'Entregados', count: orders.filter(o => o.estado === 'atendido').length },
     { key: 'cancelado', label: 'Cancelados', count: orders.filter(o => o.estado === 'cancelado').length },
   ];
@@ -604,6 +614,77 @@ const TourGuide = ({ isOpen, onClose, setView }: { isOpen: boolean, onClose: () 
 // ══════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL - AdminDashboard
 // ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// EDITOR DE BANNER DE LA APP (dinámico)
+// ══════════════════════════════════════════════════════════
+const BannerEditor = ({ supabase, showToast }: { supabase: any, showToast: (m: string, t: 'success' | 'error') => void }) => {
+  const [cfg, setCfg] = useState({ banner_activo: false, banner_titulo: '', banner_subtitulo: '', banner_color: '#6366F1' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('app_config').select('*').eq('id', 1).maybeSingle();
+      if (data) setCfg({
+        banner_activo: data.banner_activo ?? false,
+        banner_titulo: data.banner_titulo ?? '',
+        banner_subtitulo: data.banner_subtitulo ?? '',
+        banner_color: data.banner_color ?? '#6366F1',
+      });
+    })();
+  }, [supabase]);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from('app_config').update({
+      banner_activo: cfg.banner_activo,
+      banner_titulo: cfg.banner_titulo,
+      banner_subtitulo: cfg.banner_subtitulo,
+      banner_color: cfg.banner_color,
+    }).eq('id', 1);
+    setSaving(false);
+    if (error) showToast('Error al guardar: ' + error.message, 'error');
+    else showToast('Banner actualizado ✓', 'success');
+  };
+
+  const colors = ['#6366F1', '#E11D48', '#059669', '#EA580C', '#0EA5E9', '#DB2777', '#0F172A', '#F59E0B'];
+
+  return (
+    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <div className="bg-indigo-50 p-2.5 rounded-2xl text-indigo-600"><Megaphone className="w-5 h-5" /></div>
+          <div>
+            <h3 className="font-black text-slate-900 text-lg leading-tight">Banner de la App</h3>
+            <p className="text-xs text-slate-400 font-medium">Aparece arriba en la tienda del cliente</p>
+          </div>
+        </div>
+        <button onClick={() => setCfg({ ...cfg, banner_activo: !cfg.banner_activo })} className={`relative w-14 h-8 rounded-full transition-colors flex-shrink-0 ${cfg.banner_activo ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+          <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${cfg.banner_activo ? 'translate-x-6' : ''}`} />
+        </button>
+      </div>
+
+      <div className="rounded-2xl p-5 mb-5 relative overflow-hidden shadow-inner" style={{ background: `linear-gradient(90deg, ${cfg.banner_color}, ${cfg.banner_color}cc)` }}>
+        <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full" />
+        <p className="text-white font-black text-lg relative z-10">{cfg.banner_titulo || 'Título del banner'}</p>
+        <p className="text-white/80 text-sm relative z-10">{cfg.banner_subtitulo || 'Subtítulo opcional'}</p>
+      </div>
+
+      <div className="space-y-3">
+        <input value={cfg.banner_titulo} onChange={e => setCfg({ ...cfg, banner_titulo: e.target.value })} placeholder="Título (ej. ¡Delivery gratis hoy!)" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700" />
+        <input value={cfg.banner_subtitulo} onChange={e => setCfg({ ...cfg, banner_subtitulo: e.target.value })} placeholder="Subtítulo (opcional)" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700" />
+        <div className="flex items-center gap-2.5 flex-wrap py-1">
+          {colors.map(c => (
+            <button key={c} onClick={() => setCfg({ ...cfg, banner_color: c })} className={`w-8 h-8 rounded-full border-2 transition-transform ${cfg.banner_color === c ? 'border-slate-900 scale-110' : 'border-white shadow-sm'}`} style={{ background: c }} />
+          ))}
+        </div>
+        <button onClick={save} disabled={saving} className="w-full py-3.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2">
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> Guardar banner</>}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function AdminDashboard() {
   // --- ESTADOS (mismos que tenías) ---
   const [currentView, setCurrentView] = useState<'dashboard' | 'orders' | 'inventory' | 'customers'>('dashboard');
@@ -708,9 +789,32 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!newProduct.nombre || !newProduct.precio) return showToast("Faltan datos", 'error');
     const productData = { nombre: newProduct.nombre, precio: parseFloat(newProduct.precio), stock: parseInt(newProduct.stock), imagen_url: newProduct.imagen_url || '/placeholder.png', categoria: newProduct.categoria || 'Abarrotes', oferta_activa: newProduct.oferta_activa, precio_oferta: newProduct.oferta_activa ? parseFloat(newProduct.precio_oferta) : null, hora_inicio: newProduct.oferta_activa ? newProduct.hora_inicio : null, hora_fin: newProduct.oferta_activa ? newProduct.hora_fin : null };
+    // ¿Se está ACTIVANDO la oferta ahora? (antes estaba apagada o es producto nuevo)
+    const previo = editingId ? products.find(p => p.id === editingId) : null;
+    const ofertaRecienActivada = productData.oferta_activa && !previo?.oferta_activa;
+
     const { error } = editingId ? await supabase.from('productos').update(productData).eq('id', editingId) : await supabase.from('productos').insert([productData]);
     if (error) showToast("Error: " + error.message, 'error');
-    else { showToast(editingId ? "Actualizado" : "Creado", 'success'); resetForm(); }
+    else {
+      showToast(editingId ? "Actualizado" : "Creado", 'success');
+      resetForm();
+      if (ofertaRecienActivada) notificarOferta(productData.nombre, productData.precio, productData.precio_oferta);
+    }
+  };
+
+  // Push automático a todos los clientes cuando se activa una oferta
+  const notificarOferta = async (nombre: string, precio: number, precioOferta: number | null) => {
+    try {
+      const { data: tokens } = await supabase.from('fcm_tokens').select('token');
+      if (!tokens || tokens.length === 0) return;
+      const dcto = precioOferta && precio > 0 ? Math.round(((precio - precioOferta) / precio) * 100) : 0;
+      const title = dcto > 0 ? `⚡ ${nombre} con ${dcto}% de descuento` : `⚡ ¡Oferta en ${nombre}!`;
+      const body = precioOferta ? `Ahora a S/ ${precioOferta.toFixed(2)} (antes S/ ${precio.toFixed(2)}). ¡Aprovecha!` : '¡Aprovecha esta oferta por tiempo limitado!';
+      await Promise.allSettled(tokens.map((t: any) =>
+        fetch('/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t.token, title, body }) })
+      ));
+      showToast(`Oferta notificada a ${tokens.length} clientes ⚡`, 'success');
+    } catch {}
   };
   const handleEditClick = (p: Producto) => { setNewProduct({ nombre: p.nombre, precio: p.precio.toString(), stock: p.stock.toString(), imagen_url: p.imagen_url, categoria: p.categoria, oferta_activa: p.oferta_activa, precio_oferta: p.precio_oferta ? p.precio_oferta.toString() : '', hora_inicio: p.hora_inicio ? p.hora_inicio.slice(0, 5) : '07:00', hora_fin: p.hora_fin ? p.hora_fin.slice(0, 5) : '22:00' }); setEditingId(p.id); formTopRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   const resetForm = () => { setNewProduct({ nombre: '', precio: '', stock: '', imagen_url: '', categoria: '', oferta_activa: false, precio_oferta: '', hora_inicio: '07:00', hora_fin: '22:00' }); setEditingId(null); };
@@ -722,7 +826,7 @@ export default function AdminDashboard() {
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => { if (!e.target.files?.[0]) return; const reader = new FileReader(); reader.onload = async (evt) => { try { const wb = XLSX.read(evt.target?.result, { type: 'binary' }); const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]); const cats = new Set<string>(); const formatted = data.map((row: any) => { const cat = (row.categoria || row.Categoria || 'Otros').toString().trim(); const norm = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase(); cats.add(norm); return { nombre: row.nombre || row.Nombre, precio: parseFloat(row.precio || row.Precio || 0), stock: parseInt(row.stock || row.Stock || 0), categoria: norm, imagen_url: row.imagen_url || row.Imagen || '/placeholder.png' }; }); const currentLower = dynamicCategories.map(c => c.toLowerCase()); const newCats = Array.from(cats).filter(c => !currentLower.includes(c.toLowerCase())); if (newCats.length > 0) { await supabase.from('categorias').insert(newCats.map(n => ({ nombre: n }))); await fetchCategories(); } const { error } = await supabase.from('productos').upsert(formatted, { onConflict: 'nombre' }); if (error) throw error; showToast(`${formatted.length} productos procesados`, 'success'); fetchProducts(); } catch (error: any) { showToast("Error: " + error.message, 'error'); } if (excelInputRef.current) excelInputRef.current.value = ''; }; reader.readAsBinaryString(e.target.files[0]); };
 
   // Pedidos
-  const handleUpdateOrderStatus = async (id: number, status: 'pagado' | 'atendido' | 'cancelado', userId?: string) => {
+  const handleUpdateOrderStatus = async (id: number, status: 'pagado' | 'preparando' | 'atendido' | 'cancelado', userId?: string) => {
     const { error } = await supabase.from('pedidos').update({ estado: status }).eq('id', id);
     if (error) return showToast("Error", 'error');
     setOrders(prev => prev.map(o => o.id === id ? { ...o, estado: status } : o));
@@ -764,23 +868,27 @@ export default function AdminDashboard() {
       <InventoryBot products={products} orders={orders} />
 
       {/* SIDEBAR DESKTOP */}
-      <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col fixed h-full z-20 shadow-sm">
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3"><div className="bg-slate-900 p-2 rounded-xl text-white shadow-lg"><LayoutDashboard className="w-6 h-6"/></div><div><span className="font-black text-xl tracking-tight block leading-none">Jormard</span><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Admin Panel</span></div></div>
-        <nav className="flex-1 p-4 space-y-1">
-          <button id="nav-dashboard" onClick={() => setCurrentView('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'dashboard' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 className="w-5 h-5"/> Resumen</button>
-          <button id="nav-orders" onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'orders' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><ShoppingBag className="w-5 h-5"/> Pedidos {pendientes > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">{pendientes}</span>}</button>
-          <button id="nav-inventory" onClick={() => setCurrentView('inventory')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'inventory' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Package className="w-5 h-5"/> Inventario</button>
-          <button id="nav-customers" onClick={() => setCurrentView('customers')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${currentView === 'customers' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Users className="w-5 h-5"/> Clientes</button>
+      <aside className="hidden lg:flex w-64 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 flex-col fixed h-full z-20 shadow-2xl">
+        <div className="p-6 flex items-center gap-3 border-b border-white/5">
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-2.5 rounded-2xl text-white shadow-lg shadow-indigo-900/40"><LayoutDashboard className="w-6 h-6"/></div>
+          <div><span className="font-black text-xl tracking-tight block leading-none text-white">Jormard</span><span className="text-[10px] font-bold text-indigo-300/70 uppercase tracking-widest">Admin Panel</span></div>
+        </div>
+        <nav className="flex-1 p-4 space-y-1.5">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-4 pt-1 pb-1">Principal</p>
+          <button id="nav-dashboard" onClick={() => setCurrentView('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><BarChart3 className="w-5 h-5"/> Resumen</button>
+          <button id="nav-orders" onClick={() => setCurrentView('orders')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'orders' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><ShoppingBag className="w-5 h-5"/> Pedidos {pendientes > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">{pendientes}</span>}</button>
+          <button id="nav-inventory" onClick={() => setCurrentView('inventory')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'inventory' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Package className="w-5 h-5"/> Inventario</button>
+          <button id="nav-customers" onClick={() => setCurrentView('customers')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all ${currentView === 'customers' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Users className="w-5 h-5"/> Clientes</button>
         </nav>
-        <div className="p-4 border-t border-slate-100 space-y-2">
-          <button onClick={() => setShowGuide(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:text-indigo-600 rounded-xl hover:bg-indigo-50 transition"><HelpCircle className="w-4 h-4"/> Tutorial</button>
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 rounded-xl hover:bg-red-50 transition"><LogOut className="w-4 h-4"/> Salir</button>
+        <div className="p-4 border-t border-white/5 space-y-1">
+          <button onClick={() => setShowGuide(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition"><HelpCircle className="w-4 h-4"/> Tutorial</button>
+          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-400 rounded-xl hover:bg-red-500/10 transition"><LogOut className="w-4 h-4"/> Salir</button>
         </div>
       </aside>
 
       {/* SIDEBAR MOBILE */}
       <AnimatePresence>
-        {isMobileMenuOpen && (<><motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={() => setIsMobileMenuOpen(false)} className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm"/><motion.div initial={{x:'-100%'}} animate={{x:0}} exit={{x:'-100%'}} className="fixed left-0 top-0 h-full w-[280px] bg-white z-50 shadow-2xl flex flex-col lg:hidden"><div className="p-6 bg-slate-900 text-white flex items-center gap-3"><LayoutDashboard className="w-6 h-6"/> <span className="font-black text-xl">Panel Jefe</span></div><nav className="flex-1 p-4 space-y-1"><button id="nav-dashboard-mobile" onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'dashboard' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><BarChart3 className="w-5 h-5"/> Resumen</button><button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'orders' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><ShoppingBag className="w-5 h-5"/> Pedidos</button><button id="nav-inventory-mobile" onClick={() => { setCurrentView('inventory'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'inventory' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><Package className="w-5 h-5"/> Inventario</button><button id="nav-customers-mobile" onClick={() => { setCurrentView('customers'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'customers' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600'}`}><Users className="w-5 h-5"/> Clientes</button></nav><div className="p-4"><button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-50 text-red-600 font-bold"><LogOut className="w-5 h-5"/> Salir</button></div></motion.div></>)}
+        {isMobileMenuOpen && (<><motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={() => setIsMobileMenuOpen(false)} className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm"/><motion.div initial={{x:'-100%'}} animate={{x:0}} exit={{x:'-100%'}} className="fixed left-0 top-0 h-full w-[280px] bg-gradient-to-b from-slate-900 to-slate-950 z-50 shadow-2xl flex flex-col lg:hidden"><div className="p-6 border-b border-white/5 text-white flex items-center gap-3"><div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-2 rounded-xl"><LayoutDashboard className="w-5 h-5"/></div> <span className="font-black text-xl">Panel Jefe</span></div><nav className="flex-1 p-4 space-y-1"><button id="nav-dashboard-mobile" onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'dashboard' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><BarChart3 className="w-5 h-5"/> Resumen</button><button id="nav-orders-mobile" onClick={() => { setCurrentView('orders'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'orders' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><ShoppingBag className="w-5 h-5"/> Pedidos</button><button id="nav-inventory-mobile" onClick={() => { setCurrentView('inventory'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'inventory' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Package className="w-5 h-5"/> Inventario</button><button id="nav-customers-mobile" onClick={() => { setCurrentView('customers'); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold ${currentView === 'customers' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Users className="w-5 h-5"/> Clientes</button></nav><div className="p-4"><button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 text-red-400 font-bold hover:bg-red-500/20 transition"><LogOut className="w-5 h-5"/> Salir</button></div></motion.div></>)}
       </AnimatePresence>
 
       {/* CONTENIDO PRINCIPAL */}
@@ -810,11 +918,15 @@ export default function AdminDashboard() {
               <StatCard title="Pedidos Hoy" value={`${todayOrders}`} icon={<ShoppingBag className="w-7 h-7 text-white" />} bgGradient="bg-gradient-to-br from-indigo-500 to-violet-600" subtext={`${uniqueCustomers.length} clientes`} color={''} />
             </div>
 
-            {/* Breakdown de pagos + Últimos pedidos */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Banner de la app + Breakdown de pagos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <BannerEditor supabase={supabase} showToast={showToast} />
               <PaymentBreakdown orders={orders} />
-              
-              <div className="lg:col-span-2 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+            </div>
+
+            {/* Últimos pedidos */}
+            <div>
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-black text-slate-900">Últimos Pedidos</h3>
                   <button onClick={() => setCurrentView('orders')} className="text-sm font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">Ver todos <ArrowRight className="w-4 h-4" /></button>
