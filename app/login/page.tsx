@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { Store, ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock, MailCheck, ExternalLink, KeyRound, CheckCircle2 } from 'lucide-react';
+import { Store, ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock, MailCheck, ExternalLink, KeyRound, CheckCircle2, Fingerprint } from 'lucide-react';
 import Link from 'next/link';
+import { biometriaActiva, biometriaDisponible, entrarConBiometria, emailGuardado } from '../lib/biometric';
 
 // Tipos de vista para manejar la navegación interna
 type AuthView = 'login' | 'register' | 'forgot' | 'success_register' | 'success_reset';
@@ -24,7 +25,12 @@ export default function LoginPage() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState<{msg: string, type: 'error' | 'success'} | null>(null);
-  
+
+  // Entrar con huella (solo si el usuario la activó desde Configuración)
+  const [huellaLista, setHuellaLista] = useState(false);
+  const [huellaCargando, setHuellaCargando] = useState(false);
+  const [correoHuella, setCorreoHuella] = useState<string | null>(null);
+
   const router = useRouter();
 
   const supabase = createBrowserClient(
@@ -32,7 +38,38 @@ export default function LoginPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  useEffect(() => {
+    (async () => {
+      if (biometriaActiva() && (await biometriaDisponible())) {
+        setHuellaLista(true);
+        setCorreoHuella(emailGuardado());
+      }
+    })();
+  }, []);
+
   // --- HANDLERS ---
+
+  /** Login contra Supabase + redirección según rol. Lo usan el formulario y la huella. */
+  const iniciarSesion = async (correo: string, clave: string) => {
+    const { data: { user }, error } = await supabase.auth.signInWithPassword({ email: correo, password: clave });
+
+    if (error) throw new Error("Correo o contraseña incorrectos.");
+
+    if (user) {
+      // Verificar rol
+      const { data: perfil, error: profileError } = await supabase
+        .from('perfiles')
+        .select('rol')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) {
+        router.push('/cliente/catalogo');
+      } else {
+        router.push(perfil?.rol === 'admin' ? '/admin/dashboard' : '/cliente/catalogo');
+      }
+    }
+  };
 
   // 1. INICIAR SESIÓN
   const handleLogin = async (e: React.FormEvent) => {
@@ -41,28 +78,29 @@ export default function LoginPage() {
     setNotification(null);
 
     try {
-      const { data: { user }, error } = await supabase.auth.signInWithPassword({ email, password });
-      
-      if (error) throw new Error("Correo o contraseña incorrectos.");
-
-      if (user) {
-        // Verificar rol
-        const { data: perfil, error: profileError } = await supabase
-          .from('perfiles')
-          .select('rol')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError) {
-          router.push('/cliente/catalogo');
-        } else {
-          router.push(perfil?.rol === 'admin' ? '/admin/dashboard' : '/cliente/catalogo');
-        }
-      }
+      await iniciarSesion(email, password);
     } catch (error: any) {
       setNotification({ msg: error.message, type: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 1b. INICIAR SESIÓN CON HUELLA
+  const handleHuella = async () => {
+    setHuellaCargando(true);
+    setNotification(null);
+    try {
+      const cred = await entrarConBiometria();
+      if (!cred) {
+        setNotification({ msg: "No se pudo verificar tu huella.", type: 'error' });
+        return;
+      }
+      await iniciarSesion(cred.email, cred.password);
+    } catch (error: any) {
+      setNotification({ msg: error.message || "Error al entrar con huella.", type: 'error' });
+    } finally {
+      setHuellaCargando(false);
     }
   };
 
@@ -204,6 +242,40 @@ export default function LoginPage() {
 
                 <SubmitButton loading={loading} text="Ingresar" />
               </form>
+
+              {/* --- ENTRAR CON HUELLA (solo si está activada en Configuración) --- */}
+              {huellaLista && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="h-px flex-1 bg-gray-200" />
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">o</span>
+                    <div className="h-px flex-1 bg-gray-200" />
+                  </div>
+
+                  <motion.button
+                    type="button"
+                    onClick={handleHuella}
+                    disabled={huellaCargando}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="w-full flex items-center justify-center gap-3 bg-white border-2 border-orange-200 hover:border-orange-400 text-gray-900 font-black py-4 rounded-2xl transition-all shadow-sm hover:shadow-md disabled:opacity-60"
+                  >
+                    {huellaCargando ? (
+                      <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+                    ) : (
+                      <span className="relative flex">
+                        <span className="absolute inset-0 rounded-full bg-orange-400/30 animate-ping" />
+                        <Fingerprint className="w-6 h-6 text-orange-500 relative" />
+                      </span>
+                    )}
+                    <span>Entrar con huella</span>
+                  </motion.button>
+
+                  {correoHuella && (
+                    <p className="text-center text-xs text-gray-400 font-medium mt-2.5">{correoHuella}</p>
+                  )}
+                </motion.div>
+              )}
 
               <div className="mt-8 text-center">
                 <p className="text-gray-500 text-sm font-medium">¿Aún no tienes cuenta?</p>

@@ -13,8 +13,10 @@ import {
   Upload, MessageCircle, Copy, Menu, User, Settings, HelpCircle, Info, Camera, Edit2, PlayCircle,
   ChevronLeft, ChevronRight, Heart, Home, Star, LayoutGrid, Trophy, Flag, Check,
   Wallet, Truck, BadgeCheck, ReceiptText, RotateCcw, ArrowUpDown, Sparkles, Flame, Megaphone,
-  Mic, Share2, TrendingDown, AlertTriangle, Tag
+  Mic, Share2, TrendingDown, AlertTriangle, Tag,
+  Fingerprint, Mail, Lock, ShieldCheck, KeyRound, Eye, EyeOff, Bell, Volume2, CalendarDays, ChevronRight as ChevronRightIcon
 } from 'lucide-react';
+import { biometriaActiva, biometriaDisponible, activarBiometria, desactivarBiometria } from '../../lib/biometric';
 
 const LocationMap = dynamic(() => import('@/app/components/LocationMap'), { 
   ssr: false,
@@ -385,7 +387,7 @@ export default function ClientCatalog() {
   const [favorites, setFavorites] = useState<number[]>([]);
   const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [userData, setUserData] = useState<{nombre: string, telefono: string, avatar_url?: string} | null>(null);
+  const [userData, setUserData] = useState<{nombre: string, telefono: string, correo: string, avatar_url?: string} | null>(null);
   const ITEMS_PER_PAGE = 25;
   const [currentPage, setCurrentPage] = useState(1);
   const [currentView, setCurrentView] = useState<'store' | 'favorites' | 'orders' | 'profile' | 'support' | 'settings' | 'about'>('store');
@@ -429,11 +431,40 @@ export default function ClientCatalog() {
   const [editPhone, setEditPhone] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Perfil: correo, contraseña y seguridad ---
+  const [editEmail, setEditEmail] = useState('');
+  const [miembroDesde, setMiembroDesde] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [modalSeguridad, setModalSeguridad] = useState<'correo' | 'password' | null>(null);
+  const [nuevoCorreo, setNuevoCorreo] = useState('');
+  const [passActual, setPassActual] = useState('');
+  const [passNueva, setPassNueva] = useState('');
+  const [passRepetir, setPassRepetir] = useState('');
+  const [verPass, setVerPass] = useState(false);
+  const [guardandoSeguridad, setGuardandoSeguridad] = useState(false);
+
+  // --- Preferencias (Configuración) ---
+  const [sonidosOn, setSonidosOn] = useState(true);
+  const [notifsOn, setNotifsOn] = useState(false);
+
+  // --- Entrar con huella ---
+  const [huellaDisponible, setHuellaDisponible] = useState(false);
+  const [huellaOn, setHuellaOn] = useState(false);
+  const [modalHuella, setModalHuella] = useState(false);
+  const [passHuella, setPassHuella] = useState('');
+  const [activandoHuella, setActivandoHuella] = useState(false);
+
   const router = useRouter();
 
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-  const showToast = (msg: string, type: 'success' | 'error' | 'offer') => { setToast({ msg, type }); const audio = new Audio(type === 'error' ? '/notification.mp3' : '/pop.mp3'); if (type === 'success') audio.volume = 0.6; audio.play().catch(() => {}); setTimeout(() => setToast(null), 4000); };
+  // Se lee de localStorage (no del estado) para que también funcione dentro de los
+  // callbacks de realtime, que capturan el valor viejo del estado.
+  const sonidoActivo = () => typeof window !== 'undefined' && localStorage.getItem('sonidos') !== 'off';
+  const sonar = (src: string, vol = 1) => { if (!sonidoActivo()) return; const a = new Audio(src); a.volume = vol; a.play().catch(() => {}); };
+
+  const showToast = (msg: string, type: 'success' | 'error' | 'offer') => { setToast({ msg, type }); sonar(type === 'error' ? '/notification.mp3' : '/pop.mp3', type === 'success' ? 0.6 : 1); setTimeout(() => setToast(null), 4000); };
 
   // --- INIT & REALTIME ---
   useEffect(() => {
@@ -442,17 +473,52 @@ export default function ClientCatalog() {
       if (!user) { router.push('/login'); return; }
       setUserId(user.id);
       const meta = user.user_metadata;
-      setUserData({ nombre: meta.full_name || 'Cliente', telefono: meta.phone || '', avatar_url: meta.avatar_url });
-      setEditName(meta.full_name || ''); setEditPhone(meta.phone || '');
+      setUserData({ nombre: meta.full_name || 'Cliente', telefono: meta.phone || '', correo: user.email || '', avatar_url: meta.avatar_url });
+      setEditName(meta.full_name || ''); setEditPhone(meta.phone || ''); setEditEmail(user.email || '');
+      setMiembroDesde(user.created_at || '');
       Promise.all([fetchMyOrders(user.id), fetchFavorites(user.id), fetchAddresses(user.id), fetchProducts()]);
       const hasSeenTour = localStorage.getItem('hasSeenTour');
       if (!hasSeenTour) setTimeout(() => setShowTour(true), 1500);
-      const ordersSub = supabase.channel('mis-pedidos-rt').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `user_id=eq.${user.id}` }, (p) => { const n = p.new as Pedido; setMyOrders(prev => prev.map(o => o.id === n.id ? n : o)); showToast(`Pedido #${n.id}: ${n.estado.toUpperCase()}`, 'success'); new Audio('/notification.mp3').play().catch(()=>{}); }).subscribe();
+      const ordersSub = supabase.channel('mis-pedidos-rt').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `user_id=eq.${user.id}` }, (p) => { const n = p.new as Pedido; setMyOrders(prev => prev.map(o => o.id === n.id ? n : o)); showToast(`Pedido #${n.id}: ${n.estado.toUpperCase()}`, 'success'); sonar('/notification.mp3'); }).subscribe();
       const productsSub = supabase.channel('productos-rt').on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, (p) => { if (p.eventType === 'INSERT') setProducts(prev => [p.new as Producto, ...prev]); else if (p.eventType === 'UPDATE') { const u = p.new as Producto; setProducts(prev => prev.map(pr => pr.id === u.id ? u : pr)); } else if (p.eventType === 'DELETE') setProducts(prev => prev.filter(pr => pr.id !== p.old.id)); }).subscribe();
       return () => { supabase.removeChannel(ordersSub); supabase.removeChannel(productsSub); };
     };
     initData();
   }, [router]);
+
+  // ¿Este equipo puede usar huella/rostro? (y si ya está activada) + preferencias guardadas
+  useEffect(() => {
+    (async () => {
+      setHuellaDisponible(await biometriaDisponible());
+      setHuellaOn(biometriaActiva());
+      setSonidosOn(localStorage.getItem('sonidos') !== 'off');
+      setNotifsOn(typeof Notification !== 'undefined' && Notification.permission === 'granted');
+    })();
+  }, []);
+
+  const toggleSonidos = () => { const v = !sonidosOn; setSonidosOn(v); localStorage.setItem('sonidos', v ? 'on' : 'off'); if (v) sonar('/pop.mp3'); };
+
+  const toggleNotifs = async () => {
+    if (typeof Notification === 'undefined') return showToast("Tu navegador no soporta notificaciones", 'error');
+    if (notifsOn) {
+      // El navegador no deja revocar el permiso desde JS: hay que hacerlo a mano.
+      showToast("Desactívalas desde los ajustes del navegador", 'error');
+      return;
+    }
+    const permiso = await Notification.requestPermission();
+    if (permiso === 'granted') { setNotifsOn(true); showToast("Notificaciones activadas", 'success'); }
+    else showToast("Permiso denegado", 'error');
+  };
+
+  /** Borra el caché del service worker y las preferencias locales (no toca la sesión). */
+  const borrarCache = async () => {
+    try {
+      if ('caches' in window) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
+      ['hasSeenTour', 'jormard_cart', 'onboarding_visto'].forEach(k => localStorage.removeItem(k));
+      showToast("Caché limpiada, recargando…", 'success');
+      setTimeout(() => location.reload(), 900);
+    } catch { showToast("No se pudo limpiar el caché", 'error'); }
+  };
 
   const closeTour = () => { setShowTour(false); localStorage.setItem('hasSeenTour', 'true'); };
   const fetchProducts = async () => { const { data } = await supabase.from('productos').select('*').order('id', { ascending: false }); if (data) { setProducts(data); setFilteredProducts(data); } setLoading(false); };
@@ -468,8 +534,59 @@ export default function ClientCatalog() {
   const removeFromCart = (id: number) => setCart(prev => prev.filter(i => i.id !== id));
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file || !userId) return; setAvatarUploading(true); try { const fn = `avatars/${userId}_${Date.now()}.${file.name.split('.').pop()}`; await supabase.storage.from('perfiles').upload(fn, file, { upsert: true }); const { data } = supabase.storage.from('perfiles').getPublicUrl(fn); await supabase.auth.updateUser({ data: { avatar_url: data.publicUrl } }); setUserData(prev => prev ? ({ ...prev, avatar_url: data.publicUrl }) : null); showToast("Foto actualizada", 'success'); } catch (e: any) { showToast("Error: " + e.message, 'error'); } finally { setAvatarUploading(false); } };
-  const handleSaveProfile = async () => { if (!editName.trim()) return showToast("Nombre obligatorio", 'error'); try { await supabase.auth.updateUser({ data: { full_name: editName, phone: editPhone } }); setUserData(prev => prev ? ({ ...prev, nombre: editName, telefono: editPhone }) : null); setIsEditingProfile(false); showToast("Perfil actualizado", 'success'); } catch (e: any) { showToast(e.message, 'error'); } };
+  const handleSaveProfile = async () => { if (!editName.trim()) return showToast("Nombre obligatorio", 'error'); setSavingProfile(true); try { const { error } = await supabase.auth.updateUser({ data: { full_name: editName, phone: editPhone } }); if (error) throw error; setUserData(prev => prev ? ({ ...prev, nombre: editName, telefono: editPhone }) : null); setIsEditingProfile(false); showToast("Perfil actualizado", 'success'); } catch (e: any) { showToast(e.message, 'error'); } finally { setSavingProfile(false); } };
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/'); };
+
+  /**
+   * Cambia el correo. Supabase envía un enlace de confirmación al correo NUEVO
+   * (y según la configuración del proyecto, también al viejo). Hasta que se
+   * confirme, la cuenta sigue usando el correo anterior.
+   */
+  const handleCambiarCorreo = async () => {
+    const correo = nuevoCorreo.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return showToast("Correo inválido", 'error');
+    if (correo === userData?.correo) return showToast("Es tu correo actual", 'error');
+    setGuardandoSeguridad(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: correo }, { emailRedirectTo: `${location.origin}/auth/callback` });
+      if (error) throw error;
+      setModalSeguridad(null); setNuevoCorreo('');
+      showToast("Te enviamos un enlace para confirmar el nuevo correo", 'success');
+    } catch (e: any) { showToast(e.message, 'error'); } finally { setGuardandoSeguridad(false); }
+  };
+
+  /** Cambia la contraseña. Primero revalida la actual (Supabase no la pide, pero es lo correcto). */
+  const handleCambiarPassword = async () => {
+    if (passNueva.length < 6) return showToast("Mínimo 6 caracteres", 'error');
+    if (passNueva !== passRepetir) return showToast("Las contraseñas no coinciden", 'error');
+    setGuardandoSeguridad(true);
+    try {
+      const { error: errLogin } = await supabase.auth.signInWithPassword({ email: userData!.correo, password: passActual });
+      if (errLogin) throw new Error("Tu contraseña actual no es correcta");
+      const { error } = await supabase.auth.updateUser({ password: passNueva });
+      if (error) throw error;
+      // Si la huella guarda credenciales viejas, hay que rehacerla
+      if (biometriaActiva()) { await desactivarBiometria(); setHuellaOn(false); }
+      setModalSeguridad(null); setPassActual(''); setPassNueva(''); setPassRepetir('');
+      showToast("Contraseña actualizada", 'success');
+    } catch (e: any) { showToast(e.message, 'error'); } finally { setGuardandoSeguridad(false); }
+  };
+
+  /** Activa o desactiva la entrada con huella. Para activarla pide la contraseña y la guarda cifrada. */
+  const handleActivarHuella = async () => {
+    if (!passHuella) return showToast("Escribe tu contraseña", 'error');
+    setActivandoHuella(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: userData!.correo, password: passHuella });
+      if (error) throw new Error("Contraseña incorrecta");
+      const ok = await activarBiometria(userData!.correo, passHuella);
+      if (!ok) throw new Error("No se pudo registrar tu huella");
+      setHuellaOn(true); setModalHuella(false); setPassHuella('');
+      showToast("Huella activada", 'success');
+    } catch (e: any) { showToast(e.message, 'error'); } finally { setActivandoHuella(false); }
+  };
+
+  const handleDesactivarHuella = async () => { await desactivarBiometria(); setHuellaOn(false); showToast("Huella desactivada", 'error'); };
 
   useEffect(() => {
     let r = [...products];
@@ -802,9 +919,252 @@ export default function ClientCatalog() {
     }
     switch (currentView) {
       case 'orders': return (<div className="max-w-2xl mx-auto pb-32"><div className="flex items-center gap-3 mb-8"><div className="p-3 bg-indigo-50 rounded-2xl"><Clock className="w-6 h-6 text-indigo-600"/></div><h2 className="text-3xl font-black text-slate-900">Mis Pedidos</h2></div>{myOrders.length === 0 ? (<div className="text-center py-32 opacity-50 flex flex-col items-center"><Package className="w-24 h-24 mb-6 text-slate-200"/><p className="font-bold text-xl text-slate-400">Aún no tienes pedidos</p><button onClick={()=>setCurrentView('store')} className="mt-4 text-indigo-600 font-bold hover:underline">Ir a comprar</button></div>) : myOrders.map(o => (<OrderCard key={o.id} order={o} onReorder={handleReorder} />))}</div>);
-      case 'profile': return (<div className="max-w-lg mx-auto pb-32"><div className="flex items-center gap-3 mb-8"><div className="p-3 bg-indigo-50 rounded-2xl"><User className="w-6 h-6 text-indigo-600"/></div><h2 className="text-3xl font-black text-slate-900">Mi Perfil</h2></div><div className="bg-white rounded-[32px] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden"><div className="h-40 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 relative overflow-hidden"><div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div></div><div className="px-8 pb-8 relative"><div className="w-28 h-28 rounded-full bg-white p-1.5 absolute -top-14 left-1/2 -translate-x-1/2 shadow-xl group cursor-pointer" onClick={() => avatarInputRef.current?.click()}><div className="w-full h-full rounded-full bg-slate-100 overflow-hidden relative border-4 border-white">{avatarUploading ? (<div className="absolute inset-0 flex items-center justify-center bg-black/30"><Loader2 className="w-8 h-8 text-white animate-spin"/></div>) : userData?.avatar_url ? (<img src={userData.avatar_url} className="w-full h-full object-cover"/>) : (<div className="w-full h-full flex items-center justify-center text-4xl font-black text-slate-300">{userData?.nombre.charAt(0)}</div>)}<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"><Camera className="w-8 h-8 text-white"/></div></div><input type="file" ref={avatarInputRef} hidden accept="image/*" onChange={handleAvatarUpload} /></div><div className="mt-16 text-center mb-8"><h3 className="text-2xl font-black text-slate-900">{userData?.nombre}</h3><p className="text-sm font-medium text-slate-500">{userData?.telefono || 'Sin teléfono'}</p></div><div className="space-y-4">{isEditingProfile ? (<div className="space-y-5 bg-slate-50 p-6 rounded-2xl border border-slate-100"><div><label className="text-xs font-bold text-slate-400 uppercase ml-1">Nombre</label><input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-white border-slate-200 rounded-xl p-3.5 mt-1 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700"/></div><div><label className="text-xs font-bold text-slate-400 uppercase ml-1">Celular</label><input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full bg-white border-slate-200 rounded-xl p-3.5 mt-1 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700"/></div><div className="flex gap-3 pt-2"><button onClick={() => setIsEditingProfile(false)} className="flex-1 py-3.5 rounded-xl bg-white border border-slate-200 font-bold text-slate-600">Cancelar</button><button onClick={handleSaveProfile} className="flex-1 py-3.5 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-200">Guardar</button></div></div>) : (<><div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4 border border-slate-100"><div className="p-3 bg-white rounded-xl shadow-sm text-indigo-500"><User className="w-5 h-5"/></div><div><p className="text-[10px] text-slate-400 font-bold uppercase">Nombre</p><p className="font-bold text-slate-900">{userData?.nombre}</p></div></div><div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4 border border-slate-100"><div className="p-3 bg-white rounded-xl shadow-sm text-indigo-500"><Smartphone className="w-5 h-5"/></div><div><p className="text-[10px] text-slate-400 font-bold uppercase">Celular</p><p className="font-bold text-slate-900">{userData?.telefono || 'No registrado'}</p></div></div><button onClick={() => setIsEditingProfile(true)} className="w-full py-4 mt-2 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-slate-200 active:scale-95"><Edit2 className="w-4 h-4"/> Editar</button></>)}</div></div></div></div>);
+      case 'profile': return (
+        <div className="max-w-lg mx-auto pb-32">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-3 bg-indigo-50 rounded-2xl"><User className="w-6 h-6 text-indigo-600"/></div>
+            <div>
+              <h2 className="text-3xl font-black text-slate-900 leading-tight">Mi Perfil</h2>
+              <p className="text-sm font-medium text-slate-500">Tus datos y seguridad</p>
+            </div>
+          </div>
+
+          {/* ---- TARJETA PRINCIPAL ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[32px] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-5">
+            <div className="h-36 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 relative overflow-hidden">
+              <div className="absolute -top-10 -right-10 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
+              <div className="absolute -bottom-16 -left-8 w-56 h-56 bg-fuchsia-400/20 rounded-full blur-3xl" />
+            </div>
+
+            <div className="px-7 pb-7 relative">
+              {/* Avatar */}
+              <div className="w-28 h-28 rounded-full bg-white p-1.5 absolute -top-14 left-1/2 -translate-x-1/2 shadow-xl group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
+                <div className="w-full h-full rounded-full bg-slate-100 overflow-hidden relative border-4 border-white">
+                  {avatarUploading
+                    ? (<div className="absolute inset-0 flex items-center justify-center bg-black/30"><Loader2 className="w-8 h-8 text-white animate-spin"/></div>)
+                    : userData?.avatar_url
+                      ? (<img src={userData.avatar_url} className="w-full h-full object-cover"/>)
+                      : (<div className="w-full h-full flex items-center justify-center text-4xl font-black text-slate-300">{userData?.nombre.charAt(0)}</div>)}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"><Camera className="w-8 h-8 text-white"/></div>
+                </div>
+                <div className="absolute bottom-0 right-0 w-9 h-9 bg-indigo-600 rounded-full border-4 border-white flex items-center justify-center shadow-lg"><Camera className="w-4 h-4 text-white"/></div>
+                <input type="file" ref={avatarInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
+              </div>
+
+              <div className="mt-16 text-center mb-6">
+                <h3 className="text-2xl font-black text-slate-900">{userData?.nombre}</h3>
+                <p className="text-sm font-medium text-slate-500 mt-0.5">{userData?.correo}</p>
+                {miembroDesde && (
+                  <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[11px] font-black uppercase tracking-wide">
+                    <CalendarDays className="w-3.5 h-3.5"/> Cliente desde {new Date(miembroDesde).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })}
+                  </div>
+                )}
+              </div>
+
+              {/* Resumen rápido */}
+              <div className="grid grid-cols-3 gap-2.5 mb-6">
+                <div className="bg-slate-50 rounded-2xl p-3 text-center border border-slate-100">
+                  <p className="text-xl font-black text-slate-900">{myOrders.length}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Pedidos</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-3 text-center border border-slate-100">
+                  <p className="text-xl font-black text-slate-900">{favorites.length}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Favoritos</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-3 text-center border border-slate-100">
+                  <p className="text-xl font-black text-slate-900">{savedAddresses.length}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Direcciones</p>
+                </div>
+              </div>
+
+              {/* Datos personales */}
+              <AnimatePresence mode="wait">
+                {isEditingProfile ? (
+                  <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide ml-1">Nombre completo</label>
+                      <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3.5 mt-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-slate-800 transition"/>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide ml-1">Celular</label>
+                      <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="999 999 999" className="w-full bg-white border border-slate-200 rounded-xl p-3.5 mt-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-slate-800 transition"/>
+                    </div>
+                    <div className="flex gap-3 pt-1">
+                      <button onClick={() => { setIsEditingProfile(false); setEditName(userData?.nombre || ''); setEditPhone(userData?.telefono || ''); }} className="flex-1 py-3.5 rounded-xl bg-white border border-slate-200 font-bold text-slate-600 active:scale-95 transition">Cancelar</button>
+                      <button onClick={handleSaveProfile} disabled={savingProfile} className="flex-1 py-3.5 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-60">
+                        {savingProfile ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4"/>} Guardar
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div key="view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2.5">
+                    <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4 border border-slate-100">
+                      <div className="p-2.5 bg-white rounded-xl shadow-sm text-indigo-500"><User className="w-5 h-5"/></div>
+                      <div className="min-w-0"><p className="text-[10px] text-slate-400 font-black uppercase tracking-wide">Nombre</p><p className="font-bold text-slate-900 truncate">{userData?.nombre}</p></div>
+                    </div>
+                    <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4 border border-slate-100">
+                      <div className="p-2.5 bg-white rounded-xl shadow-sm text-indigo-500"><Smartphone className="w-5 h-5"/></div>
+                      <div className="min-w-0"><p className="text-[10px] text-slate-400 font-black uppercase tracking-wide">Celular</p><p className="font-bold text-slate-900 truncate">{userData?.telefono || 'No registrado'}</p></div>
+                    </div>
+                    <button onClick={() => setIsEditingProfile(true)} className="w-full py-4 mt-2 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-slate-200 active:scale-95 transition">
+                      <Edit2 className="w-4 h-4"/> Editar datos
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+
+          {/* ---- CUENTA Y ACCESO ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden mb-5">
+            <div className="px-6 pt-5 pb-3 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600"/>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Cuenta y acceso</p>
+            </div>
+
+            <button onClick={() => { setNuevoCorreo(''); setModalSeguridad('correo'); }} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+              <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600"><Mail className="w-5 h-5"/></div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-800">Correo electrónico</p>
+                <p className="text-xs text-slate-500 truncate">{userData?.correo}</p>
+              </div>
+              <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+            </button>
+
+            <div className="mx-6 border-t border-slate-100" />
+
+            <button onClick={() => { setPassActual(''); setPassNueva(''); setPassRepetir(''); setModalSeguridad('password'); }} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600"><KeyRound className="w-5 h-5"/></div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-800">Contraseña</p>
+                <p className="text-xs text-slate-500">Cámbiala cuando quieras</p>
+              </div>
+              <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+            </button>
+
+            {huellaDisponible && (<>
+              <div className="mx-6 border-t border-slate-100" />
+              <div className="px-6 py-4 flex items-center gap-4">
+                <div className={`p-2.5 rounded-xl transition ${huellaOn ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}><Fingerprint className="w-5 h-5"/></div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800">Entrar con huella</p>
+                  <p className="text-xs text-slate-500">{huellaOn ? 'Activada en este dispositivo' : 'Ingresa sin escribir tu contraseña'}</p>
+                </div>
+                <button
+                  onClick={() => huellaOn ? handleDesactivarHuella() : (setPassHuella(''), setModalHuella(true))}
+                  className={`w-14 h-8 rounded-full relative transition-colors shrink-0 ${huellaOn ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                >
+                  <motion.div layout transition={{ type: 'spring', stiffness: 500, damping: 32 }} className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-md ${huellaOn ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+            </>)}
+          </motion.div>
+
+          {/* ---- CERRAR SESIÓN ---- */}
+          <button onClick={handleLogout} className="w-full py-4 rounded-2xl bg-red-50 text-red-600 font-black flex items-center justify-center gap-2 border border-red-100 hover:bg-red-100 active:scale-95 transition">
+            <LogOut className="w-5 h-5"/> Cerrar sesión
+          </button>
+        </div>
+      );
       case 'support': return (<div className="max-w-lg mx-auto pb-32"><div className="flex items-center gap-3 mb-8"><div className="p-3 bg-green-50 rounded-2xl"><HelpCircle className="w-6 h-6 text-green-600"/></div><h2 className="text-3xl font-black text-slate-900">Ayuda y Soporte</h2></div><div className="space-y-6"><div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 rounded-[32px] shadow-lg shadow-green-200 text-center text-white relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl -mr-10 -mt-10"></div><div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><MessageCircle className="w-10 h-10 text-white"/></div><h3 className="font-black text-2xl mb-2">¿Necesitas ayuda?</h3><p className="text-green-100 text-sm mb-8">Nuestro equipo está listo por WhatsApp.</p><div className="flex gap-4"><button onClick={() => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=Hola,%20tengo%20una%20consulta`, '_blank')} className="flex-1 py-4 bg-white text-green-600 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><MessageCircle className="w-5 h-5"/> WhatsApp</button><button onClick={() => window.open('tel:961241085')} className="flex-1 py-4 bg-black/20 text-white rounded-xl font-bold flex items-center justify-center gap-2 backdrop-blur-md"><Smartphone className="w-5 h-5"/> Llamar</button></div></div><div><h3 className="font-black text-slate-900 mb-4 ml-1 text-lg">Preguntas Frecuentes</h3><div className="space-y-3"><FAQItem question="¿Cuál es el tiempo de entrega?" answer="30 a 45 minutos dependiendo de la zona." /><FAQItem question="¿Métodos de pago?" answer="Efectivo, Yape, Plin y Tarjeta de débito/crédito." /><FAQItem question="¿Puedo cancelar mi pedido?" answer="Solo si el estado es 'Pendiente'. Si ya está en camino, contáctanos." /></div></div></div></div>);
-      case 'settings': return (<div className="max-w-lg mx-auto pb-32"><div className="flex items-center gap-3 mb-8"><div className="p-3 bg-slate-100 rounded-2xl"><Settings className="w-6 h-6 text-slate-700"/></div><h2 className="text-3xl font-black text-slate-900">Configuración</h2></div><div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-2"><div className="p-4 flex justify-between items-center hover:bg-slate-50 rounded-2xl transition cursor-pointer"><div><p className="font-bold text-slate-800">Notificaciones</p><p className="text-xs text-slate-500">Recibir alertas de pedidos</p></div><div className="w-12 h-7 bg-green-500 rounded-full relative"><div className="w-5 h-5 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div></div><div className="p-4 flex justify-between items-center hover:bg-slate-50 rounded-2xl transition cursor-pointer"><div><p className="font-bold text-slate-800">Sonidos</p><p className="text-xs text-slate-500">Efectos de sonido</p></div><div className="w-12 h-7 bg-green-500 rounded-full relative"><div className="w-5 h-5 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div></div><div className="p-4 hover:bg-red-50 rounded-2xl transition cursor-pointer"><button onClick={() => showToast("Caché limpiada", 'success')} className="text-red-500 font-bold text-sm flex items-center gap-3 w-full"><Trash2 className="w-5 h-5"/> Borrar caché</button></div></div></div>);
+      case 'settings': return (
+        <div className="max-w-lg mx-auto pb-32">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-3 bg-slate-100 rounded-2xl"><Settings className="w-6 h-6 text-slate-700"/></div>
+            <div>
+              <h2 className="text-3xl font-black text-slate-900 leading-tight">Configuración</h2>
+              <p className="text-sm font-medium text-slate-500">Preferencias de la app</p>
+            </div>
+          </div>
+
+          {/* ---- SEGURIDAD ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden mb-5">
+            <div className="px-6 pt-5 pb-3 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600"/>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Seguridad</p>
+            </div>
+
+            {huellaDisponible ? (
+              <div className="px-6 py-4 flex items-center gap-4">
+                <div className={`p-2.5 rounded-xl transition ${huellaOn ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}><Fingerprint className="w-5 h-5"/></div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800">Entrar con huella</p>
+                  <p className="text-xs text-slate-500">{huellaOn ? 'Activada en este dispositivo' : 'Ingresa sin escribir tu contraseña'}</p>
+                </div>
+                <button
+                  onClick={() => huellaOn ? handleDesactivarHuella() : (setPassHuella(''), setModalHuella(true))}
+                  className={`w-14 h-8 rounded-full relative transition-colors shrink-0 ${huellaOn ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                >
+                  <motion.div layout transition={{ type: 'spring', stiffness: 500, damping: 32 }} className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-md ${huellaOn ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+            ) : (
+              <div className="px-6 py-4 flex items-center gap-4 opacity-60">
+                <div className="p-2.5 rounded-xl bg-slate-100 text-slate-400"><Fingerprint className="w-5 h-5"/></div>
+                <div className="flex-1"><p className="font-bold text-slate-800">Entrar con huella</p><p className="text-xs text-slate-500">Este dispositivo no la soporta</p></div>
+              </div>
+            )}
+
+            <div className="mx-6 border-t border-slate-100" />
+            <button onClick={() => { setPassActual(''); setPassNueva(''); setPassRepetir(''); setModalSeguridad('password'); }} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600"><KeyRound className="w-5 h-5"/></div>
+              <div className="flex-1"><p className="font-bold text-slate-800">Cambiar contraseña</p><p className="text-xs text-slate-500">Actualiza tu clave de acceso</p></div>
+              <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+            </button>
+          </motion.div>
+
+          {/* ---- PREFERENCIAS ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden mb-5">
+            <div className="px-6 pt-5 pb-3 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-500"/>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Preferencias</p>
+            </div>
+
+            <div className="px-6 py-4 flex items-center gap-4">
+              <div className={`p-2.5 rounded-xl transition ${notifsOn ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}><Bell className="w-5 h-5"/></div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-800">Notificaciones</p>
+                <p className="text-xs text-slate-500">Avisos del estado de tus pedidos y ofertas</p>
+              </div>
+              <button onClick={toggleNotifs} className={`w-14 h-8 rounded-full relative transition-colors shrink-0 ${notifsOn ? 'bg-indigo-500' : 'bg-slate-200'}`}>
+                <motion.div layout transition={{ type: 'spring', stiffness: 500, damping: 32 }} className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-md ${notifsOn ? 'right-1' : 'left-1'}`} />
+              </button>
+            </div>
+
+            <div className="mx-6 border-t border-slate-100" />
+
+            <div className="px-6 py-4 flex items-center gap-4">
+              <div className={`p-2.5 rounded-xl transition ${sonidosOn ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}><Volume2 className="w-5 h-5"/></div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-800">Sonidos</p>
+                <p className="text-xs text-slate-500">Efectos al agregar productos y avisos</p>
+              </div>
+              <button onClick={toggleSonidos} className={`w-14 h-8 rounded-full relative transition-colors shrink-0 ${sonidosOn ? 'bg-indigo-500' : 'bg-slate-200'}`}>
+                <motion.div layout transition={{ type: 'spring', stiffness: 500, damping: 32 }} className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-md ${sonidosOn ? 'right-1' : 'left-1'}`} />
+              </button>
+            </div>
+
+            <div className="mx-6 border-t border-slate-100" />
+
+            <button onClick={() => { setCurrentView('store'); setShowTour(true); }} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+              <div className="p-2.5 bg-purple-50 rounded-xl text-purple-600"><PlayCircle className="w-5 h-5"/></div>
+              <div className="flex-1"><p className="font-bold text-slate-800">Ver el tutorial</p><p className="text-xs text-slate-500">Repasa cómo usar la tienda</p></div>
+              <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+            </button>
+          </motion.div>
+
+          {/* ---- DATOS ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden mb-5">
+            <button onClick={borrarCache} className="w-full px-6 py-5 flex items-center gap-4 hover:bg-red-50 transition text-left group">
+              <div className="p-2.5 bg-red-50 rounded-xl text-red-500 group-hover:bg-red-100 transition"><Trash2 className="w-5 h-5"/></div>
+              <div className="flex-1"><p className="font-bold text-red-600">Borrar caché</p><p className="text-xs text-slate-500">Libera espacio. No cierra tu sesión.</p></div>
+              <ChevronRightIcon className="w-5 h-5 text-red-200"/>
+            </button>
+          </motion.div>
+
+          <p className="text-center text-xs font-medium text-slate-400">Bodega Jormard · Ferreñafe</p>
+        </div>
+      );
       case 'about': return (<div className="max-w-lg mx-auto pb-32 text-center pt-10"><div className="bg-white p-12 rounded-[40px] shadow-xl shadow-slate-200 border border-slate-100 inline-block mb-10 relative overflow-hidden"><div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 via-pink-500 to-indigo-500"></div><div className="bg-slate-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><Store className="w-12 h-12 text-slate-900"/></div><h1 className="text-3xl font-black text-slate-900 mb-1">Bodega Jormard</h1><p className="text-slate-500">Tu tienda en el bolsillo</p><span className="inline-block mt-6 px-4 py-1.5 bg-slate-100 rounded-full text-xs font-bold text-slate-600">v2.5.0</span></div><button onClick={() => window.open('https://bodega-jormard.vercel.app', '_blank')} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl mb-8 hover:bg-indigo-600 shadow-xl shadow-slate-200 active:scale-95">Visitar Sitio Web</button><p className="text-xs text-slate-400">© 2026 Jormard Inc.</p></div>);
       default: return null;
     }
@@ -1044,6 +1404,130 @@ export default function ClientCatalog() {
       <AnimatePresence>
         {mostrarOnboarding && (
           <OnboardingWeb onFinish={() => { localStorage.setItem('onboarding_visto', '1'); setMostrarOnboarding(false); }} />
+        )}
+      </AnimatePresence>
+
+      {/* ══════ CAMBIAR CORREO / CONTRASEÑA ══════ */}
+      <AnimatePresence>
+        {modalSeguridad && (
+          <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalSeguridad(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div
+              initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 40, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+              className="relative w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] p-7 shadow-2xl"
+            >
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
+
+              {modalSeguridad === 'correo' ? (<>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="p-3 bg-blue-50 rounded-2xl text-blue-600"><Mail className="w-6 h-6"/></div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 leading-tight">Cambiar correo</h3>
+                    <p className="text-xs font-medium text-slate-500">Actual: {userData?.correo}</p>
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-5 flex gap-3">
+                  <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5"/>
+                  <p className="text-xs text-blue-800 font-medium leading-relaxed">Te enviaremos un enlace al correo nuevo. Tu cuenta seguirá usando el correo actual hasta que lo confirmes.</p>
+                </div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide ml-1">Nuevo correo</label>
+                <input type="email" value={nuevoCorreo} onChange={e => setNuevoCorreo(e.target.value)} placeholder="tucorreo@ejemplo.com" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 mt-1.5 mb-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-slate-800 transition"/>
+                <div className="flex gap-3">
+                  <button onClick={() => setModalSeguridad(null)} className="flex-1 py-3.5 rounded-xl bg-slate-100 font-bold text-slate-600 active:scale-95 transition">Cancelar</button>
+                  <button onClick={handleCambiarCorreo} disabled={guardandoSeguridad} className="flex-1 py-3.5 rounded-xl bg-blue-600 text-white font-bold shadow-lg shadow-blue-200 flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-60">
+                    {guardandoSeguridad ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4"/>} Enviar enlace
+                  </button>
+                </div>
+              </>) : (<>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="p-3 bg-amber-50 rounded-2xl text-amber-600"><KeyRound className="w-6 h-6"/></div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 leading-tight">Cambiar contraseña</h3>
+                    <p className="text-xs font-medium text-slate-500">Mínimo 6 caracteres</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide ml-1">Contraseña actual</label>
+                    <div className="relative">
+                      <input type={verPass ? 'text' : 'password'} value={passActual} onChange={e => setPassActual(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 pr-12 mt-1.5 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-bold text-slate-800 transition"/>
+                      <button type="button" onClick={() => setVerPass(!verPass)} className="absolute right-4 top-[22px] text-slate-400 hover:text-slate-600">
+                        {verPass ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide ml-1">Nueva contraseña</label>
+                    <input type={verPass ? 'text' : 'password'} value={passNueva} onChange={e => setPassNueva(e.target.value)} placeholder="••••••••" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 mt-1.5 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-bold text-slate-800 transition"/>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide ml-1">Repetir nueva contraseña</label>
+                    <input type={verPass ? 'text' : 'password'} value={passRepetir} onChange={e => setPassRepetir(e.target.value)} placeholder="••••••••" className={`w-full bg-slate-50 border rounded-xl p-3.5 mt-1.5 focus:ring-2 outline-none font-bold text-slate-800 transition ${passRepetir && passNueva !== passRepetir ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-amber-500 focus:border-amber-500'}`}/>
+                    {passRepetir && passNueva !== passRepetir && <p className="text-[11px] font-bold text-red-500 mt-1.5 ml-1">No coinciden</p>}
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button onClick={() => setModalSeguridad(null)} className="flex-1 py-3.5 rounded-xl bg-slate-100 font-bold text-slate-600 active:scale-95 transition">Cancelar</button>
+                  <button onClick={handleCambiarPassword} disabled={guardandoSeguridad} className="flex-1 py-3.5 rounded-xl bg-slate-900 text-white font-bold shadow-lg shadow-slate-200 flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-60">
+                    {guardandoSeguridad ? <Loader2 className="w-4 h-4 animate-spin"/> : <Lock className="w-4 h-4"/>} Actualizar
+                  </button>
+                </div>
+              </>)}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ══════ ACTIVAR HUELLA (pide la contraseña para guardarla cifrada) ══════ */}
+      <AnimatePresence>
+        {modalHuella && (
+          <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalHuella(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div
+              initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 40, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+              className="relative w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] p-7 shadow-2xl text-center"
+            >
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
+
+              <div className="relative inline-flex mb-5">
+                <span className="absolute inset-0 rounded-full bg-emerald-400/30 animate-ping" />
+                <div className="relative p-5 bg-emerald-50 rounded-full text-emerald-600"><Fingerprint className="w-10 h-10"/></div>
+              </div>
+
+              <h3 className="text-xl font-black text-slate-900">Activar entrada con huella</h3>
+              <p className="text-sm text-slate-500 font-medium mt-2 mb-6 leading-relaxed">
+                Confirma tu contraseña. La guardaremos cifrada en este dispositivo para que puedas entrar solo con tu huella.
+              </p>
+
+              <div className="text-left mb-6">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide ml-1">Tu contraseña</label>
+                <div className="relative">
+                  <input
+                    type={verPass ? 'text' : 'password'}
+                    value={passHuella}
+                    onChange={e => setPassHuella(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleActivarHuella()}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 pr-12 mt-1.5 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-bold text-slate-800 transition"
+                  />
+                  <button type="button" onClick={() => setVerPass(!verPass)} className="absolute right-4 top-[22px] text-slate-400 hover:text-slate-600">
+                    {verPass ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setModalHuella(false)} className="flex-1 py-3.5 rounded-xl bg-slate-100 font-bold text-slate-600 active:scale-95 transition">Cancelar</button>
+                <button onClick={handleActivarHuella} disabled={activandoHuella} className="flex-1 py-3.5 rounded-xl bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-60">
+                  {activandoHuella ? <Loader2 className="w-4 h-4 animate-spin"/> : <Fingerprint className="w-4 h-4"/>} Activar
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
