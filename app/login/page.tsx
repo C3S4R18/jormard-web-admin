@@ -1,42 +1,61 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { Store, ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock, MailCheck, ExternalLink, KeyRound, CheckCircle2, Fingerprint } from 'lucide-react';
+import {
+  ArrowRight, ArrowLeft, Loader2, AlertCircle, User, Phone, Mail, Lock,
+  MailCheck, ExternalLink, KeyRound, CheckCircle2, Fingerprint, Store,
+  Eye, EyeOff, Package, Wallet, Truck,
+} from 'lucide-react';
 import Link from 'next/link';
 import { biometriaActiva, biometriaDisponible, entrarConBiometria, emailGuardado } from '../lib/biometric';
 
-// Tipos de vista para manejar la navegación interna
 type AuthView = 'login' | 'register' | 'forgot' | 'success_register' | 'success_reset';
 
+/** Fuerza de la contraseña: 0 a 4. Sirve para guiar, no para bloquear. */
+function fuerzaPassword(pass: string) {
+  if (!pass) return 0;
+  let puntos = 0;
+  if (pass.length >= 6) puntos++;
+  if (pass.length >= 10) puntos++;
+  if (/[A-Z]/.test(pass) && /[a-z]/.test(pass)) puntos++;
+  if (/\d/.test(pass) || /[^A-Za-z0-9]/.test(pass)) puntos++;
+  return Math.min(puntos, 4);
+}
+
+const NIVELES = [
+  { txt: '', color: '' },
+  { txt: 'Muy débil', color: 'bg-red-500' },
+  { txt: 'Débil', color: 'bg-orange-500' },
+  { txt: 'Buena', color: 'bg-yellow-500' },
+  { txt: 'Fuerte', color: 'bg-emerald-500' },
+];
+
 export default function LoginPage() {
-  // --- ESTADOS ---
-  const [view, setView] = useState<AuthView>('login'); // Controla qué pantalla se ve
-  
-  // Campos del formulario
+  const [view, setView] = useState<AuthView>('login');
+
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
-  // UI States
-  const [passwordVisible, setPasswordVisible] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState<{msg: string, type: 'error' | 'success'} | null>(null);
 
-  // Entrar con huella (solo si el usuario la activó desde Configuración)
+  const [verPass, setVerPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState<{ msg: string, type: 'error' | 'success' } | null>(null);
+
   const [huellaLista, setHuellaLista] = useState(false);
   const [huellaCargando, setHuellaCargando] = useState(false);
   const [correoHuella, setCorreoHuella] = useState<string | null>(null);
 
   const router = useRouter();
-
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+
+  const fuerza = useMemo(() => fuerzaPassword(password), [password]);
 
   useEffect(() => {
     (async () => {
@@ -47,397 +66,438 @@ export default function LoginPage() {
     })();
   }, []);
 
-  // --- HANDLERS ---
+  // ---- LÓGICA (sin cambios de comportamiento) ----
 
-  /** Login contra Supabase + redirección según rol. Lo usan el formulario y la huella. */
   const iniciarSesion = async (correo: string, clave: string) => {
     const { data: { user }, error } = await supabase.auth.signInWithPassword({ email: correo, password: clave });
-
     if (error) throw new Error("Correo o contraseña incorrectos.");
-
     if (user) {
-      // Verificar rol
       const { data: perfil, error: profileError } = await supabase
-        .from('perfiles')
-        .select('rol')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        router.push('/cliente/catalogo');
-      } else {
-        router.push(perfil?.rol === 'admin' ? '/admin/dashboard' : '/cliente/catalogo');
-      }
+        .from('perfiles').select('rol').eq('id', user.id).single();
+      if (profileError) router.push('/cliente/catalogo');
+      else router.push(perfil?.rol === 'admin' ? '/admin/dashboard' : '/cliente/catalogo');
     }
   };
 
-  // 1. INICIAR SESIÓN
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setNotification(null);
-
-    try {
-      await iniciarSesion(email, password);
-    } catch (error: any) {
-      setNotification({ msg: error.message, type: 'error' });
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setNotification(null);
+    try { await iniciarSesion(email, password); }
+    catch (error: any) { setNotification({ msg: error.message, type: 'error' }); }
+    finally { setLoading(false); }
   };
 
-  // 1b. INICIAR SESIÓN CON HUELLA
   const handleHuella = async () => {
-    setHuellaCargando(true);
-    setNotification(null);
+    setHuellaCargando(true); setNotification(null);
     try {
       const cred = await entrarConBiometria();
-      if (!cred) {
-        setNotification({ msg: "No se pudo verificar tu huella.", type: 'error' });
-        return;
-      }
+      if (!cred) { setNotification({ msg: "No se pudo verificar tu huella.", type: 'error' }); return; }
       await iniciarSesion(cred.email, cred.password);
     } catch (error: any) {
       setNotification({ msg: error.message || "Error al entrar con huella.", type: 'error' });
-    } finally {
-      setHuellaCargando(false);
-    }
+    } finally { setHuellaCargando(false); }
   };
 
-  // 2. REGISTRO
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setNotification(null);
-
+    setLoading(true); setNotification(null);
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+        email, password,
         options: {
           emailRedirectTo: `${location.origin}/auth/callback`,
-          data: { full_name: fullName, phone: phone },
+          data: { full_name: fullName, phone },
         },
       });
-
       if (error) throw error;
-      
-      if (data.session) {
-        router.push('/cliente/catalogo'); // Acceso directo si no requiere confirmación
-      } else {
-        setView('success_register'); // Mostrar pantalla de éxito
-      }
+      if (data.session) router.push('/cliente/catalogo');
+      else setView('success_register');
     } catch (error: any) {
       setNotification({ msg: error.message, type: 'error' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  // 3. RECUPERAR CONTRASEÑA
   const handleRecover = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setNotification(null);
-
+    setLoading(true); setNotification(null);
     if (!email) {
-        setNotification({ msg: "Ingresa tu correo para recuperar.", type: 'error' });
-        setLoading(false);
-        return;
+      setNotification({ msg: "Ingresa tu correo para recuperar.", type: 'error' });
+      setLoading(false); return;
     }
-
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/update-password`,
       });
-
       if (error) throw error;
-      
-      setView('success_reset'); 
-
+      setView('success_reset');
     } catch (error: any) {
       setNotification({ msg: error.message || "Error al enviar el correo.", type: 'error' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  // --- RENDERIZADO ---
+  const cambiarVista = (v: AuthView) => { setView(v); setNotification(null); };
+
+  // ---- RENDER ----
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FFF7ED] relative px-4 font-sans overflow-hidden selection:bg-orange-200">
-      
-      {/* --- FONDO MODERNO --- */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute top-[-10%] right-[-5%] w-[800px] h-[800px] bg-gradient-to-br from-orange-300/30 to-red-300/30 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[600px] h-[600px] bg-gradient-to-tr from-yellow-200/40 to-orange-200/40 rounded-full blur-[100px]" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
-      </div>
+    <div className="flex min-h-screen bg-white font-sans">
 
-      {/* --- BOTÓN REGRESAR --- */}
-      <Link 
-        href="/"
-        className="absolute top-6 left-6 z-20 flex items-center gap-2 bg-white/60 backdrop-blur-md hover:bg-white text-gray-700 px-5 py-2.5 rounded-2xl shadow-sm transition-all hover:shadow-md font-bold text-sm group border border-white/50"
-      >
-        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-        <span>Volver</span>
-      </Link>
+      {/* ══════════ PANEL DE MARCA (solo escritorio) ══════════ */}
+      <aside className="relative hidden w-[46%] shrink-0 overflow-hidden bg-slate-950 lg:flex lg:flex-col">
+        <div className="absolute -left-24 -top-24 h-96 w-96 rounded-full bg-orange-500/25 blur-[110px]" />
+        <div className="absolute -bottom-32 -right-20 h-[26rem] w-[26rem] rounded-full bg-rose-500/20 blur-[120px]" />
+        <div className="absolute inset-0 opacity-[0.15] [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:26px_26px]" />
 
-      {/* --- TARJETA PRINCIPAL (GLASSMORPHISM) --- */}
-      <motion.div 
-        layout
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white/80 backdrop-blur-xl border border-white/60 p-8 sm:p-10 rounded-[2.5rem] shadow-2xl w-full max-w-[420px] z-10 relative overflow-hidden"
-      >
-        <AnimatePresence mode="wait">
-          
-          {/* VISTA 1: LOGIN */}
-          {view === 'login' && (
-            <motion.div key="login" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{duration: 0.3}}>
-              <div className="text-center mb-8">
-                <div className="inline-flex p-4 bg-gradient-to-br from-orange-500 to-red-600 rounded-3xl mb-5 shadow-lg shadow-orange-200 text-white transform rotate-3">
-                  <Store className="w-8 h-8" />
-                </div>
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">¡Hola de nuevo!</h2>
-                <p className="text-gray-500 mt-2 font-medium">Ingresa a tu cuenta para pedir.</p>
-              </div>
+        <div className="relative flex h-full flex-col justify-between p-12 xl:p-16">
+          <Link href="/" className="flex w-fit items-center gap-3 transition hover:opacity-80">
+            <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 p-2.5 text-white shadow-lg shadow-orange-500/25">
+              <Store className="h-5 w-5" />
+            </div>
+            <div className="leading-none">
+              <span className="block text-[17px] font-black tracking-tight text-white">Bodega Jormard</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">Ferreñafe</span>
+            </div>
+          </Link>
 
-              {notification && (
-                 <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 text-sm font-bold ${notification.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
-                    {notification.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
-                    {notification.msg}
-                 </div>
-              )}
+          <div>
+            <h2 className="max-w-md text-[2.6rem] font-black leading-[1.08] tracking-[-0.03em] text-white">
+              Tu bodega de siempre,
+              <span className="block bg-gradient-to-r from-orange-400 to-rose-400 bg-clip-text text-transparent">
+                ahora a un toque.
+              </span>
+            </h2>
 
-              <form onSubmit={handleLogin} className="space-y-5">
-                <InputGroup icon={<Mail/>} type="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={setEmail} label="Correo Electrónico" />
-                <div>
-                   <div className="relative">
-                      <InputGroup 
-                          icon={<Lock/>} 
-                          type={passwordVisible ? "text" : "password"} 
-                          placeholder="••••••••" 
-                          value={password} 
-                          onChange={setPassword} 
-                          label="Contraseña" 
-                      />
-                      {/* OJO ANIMADO */}
-                      <button 
-                        type="button"
-                        onClick={() => setPasswordVisible(!passwordVisible)}
-                        className="absolute right-4 top-[34px] text-gray-400 hover:text-orange-600 transition-colors focus:outline-none"
-                      >
-                          {passwordVisible ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                          ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-                          )}
-                      </button>
-                   </div>
-                   <div className="flex justify-end mt-2">
-                       <button type="button" onClick={() => setView('forgot')} className="text-xs font-bold text-orange-600 hover:text-orange-700 hover:underline transition-colors">¿Olvidaste tu contraseña?</button>
-                   </div>
-                </div>
-
-                <SubmitButton loading={loading} text="Ingresar" />
-              </form>
-
-              {/* --- ENTRAR CON HUELLA (solo si está activada en Configuración) --- */}
-              {huellaLista && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="h-px flex-1 bg-gray-200" />
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">o</span>
-                    <div className="h-px flex-1 bg-gray-200" />
+            <div className="mt-10 space-y-5">
+              {[
+                { icon: Package, t: '686 productos', d: 'Abarrotes, bebidas, snacks y limpieza' },
+                { icon: Truck, t: 'Delivery o recojo', d: 'A tu casa en 30 a 45 minutos' },
+                { icon: Wallet, t: 'Yape, Plin o efectivo', d: 'Paga como te quede mejor' },
+              ].map((item) => (
+                <div key={item.t} className="flex items-center gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-orange-400">
+                    <item.icon className="h-5 w-5" />
                   </div>
+                  <div>
+                    <p className="text-sm font-black text-white">{item.t}</p>
+                    <p className="text-[13px] font-medium text-white/45">{item.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-                  <motion.button
-                    type="button"
-                    onClick={handleHuella}
-                    disabled={huellaCargando}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="w-full flex items-center justify-center gap-3 bg-white border-2 border-orange-200 hover:border-orange-400 text-gray-900 font-black py-4 rounded-2xl transition-all shadow-sm hover:shadow-md disabled:opacity-60"
-                  >
-                    {huellaCargando ? (
-                      <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
-                    ) : (
-                      <span className="relative flex">
-                        <span className="absolute inset-0 rounded-full bg-orange-400/30 animate-ping" />
-                        <Fingerprint className="w-6 h-6 text-orange-500 relative" />
-                      </span>
-                    )}
-                    <span>Entrar con huella</span>
-                  </motion.button>
+          <p className="text-xs font-medium text-white/30">© 2026 Bodega Jormard · NeyraDev</p>
+        </div>
+      </aside>
 
-                  {correoHuella && (
-                    <p className="text-center text-xs text-gray-400 font-medium mt-2.5">{correoHuella}</p>
+      {/* ══════════ PANEL DEL FORMULARIO ══════════ */}
+      <main className="relative flex flex-1 flex-col">
+        {/* Fondo suave solo en móvil */}
+        <div className="pointer-events-none absolute inset-0 lg:hidden">
+          <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-orange-200/40 blur-[90px]" />
+          <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-rose-200/30 blur-[90px]" />
+        </div>
+
+        {/* Volver, solo móvil (en escritorio el logo del panel ya enlaza) */}
+        <div className="relative z-10 p-6 lg:hidden">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 transition hover:text-slate-900">
+            <ArrowLeft className="h-4 w-4" /> Volver
+          </Link>
+        </div>
+
+        <div className="relative z-10 flex flex-1 items-center justify-center px-6 pb-12 lg:px-12">
+          <div className="w-full max-w-[400px]">
+
+            {/* Logo en móvil */}
+            <Link href="/" className="mb-9 flex items-center justify-center gap-3 lg:hidden">
+              <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 p-2.5 text-white shadow-lg shadow-orange-300/40">
+                <Store className="h-5 w-5" />
+              </div>
+              <span className="text-lg font-black tracking-tight text-slate-900">Bodega Jormard</span>
+            </Link>
+
+            <AnimatePresence mode="wait">
+
+              {/* ─────── LOGIN ─────── */}
+              {view === 'login' && (
+                <motion.div key="login" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+                  <h1 className="text-[2rem] font-black leading-tight tracking-tight text-slate-950">
+                    Hola de nuevo 👋
+                  </h1>
+                  <p className="mt-2 font-medium text-slate-500">
+                    Entra a tu cuenta para hacer tu pedido.
+                  </p>
+
+                  <Aviso notification={notification} />
+
+                  <form onSubmit={handleLogin} className="mt-8 space-y-5">
+                    <Campo icon={Mail} label="Correo electrónico" type="email" value={email} onChange={setEmail} placeholder="tucorreo@ejemplo.com" />
+
+                    <div>
+                      <CampoPassword label="Contraseña" value={password} onChange={setPassword} ver={verPass} setVer={setVerPass} placeholder="Tu contraseña" />
+                      <div className="mt-2 flex justify-end">
+                        <button type="button" onClick={() => cambiarVista('forgot')} className="text-xs font-bold text-orange-600 transition hover:text-orange-700 hover:underline">
+                          ¿Olvidaste tu contraseña?
+                        </button>
+                      </div>
+                    </div>
+
+                    <BotonPrincipal loading={loading} texto="Ingresar" />
+                  </form>
+
+                  {huellaLista && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6">
+                      <Separador />
+                      <motion.button
+                        type="button" onClick={handleHuella} disabled={huellaCargando}
+                        whileHover={{ scale: 1.015 }} whileTap={{ scale: 0.98 }}
+                        className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-200 bg-white py-3.5 font-black text-slate-900 transition hover:border-orange-300 hover:bg-orange-50/50 disabled:opacity-60"
+                      >
+                        {huellaCargando
+                          ? <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
+                          : <span className="relative flex">
+                              <span className="absolute inset-0 animate-ping rounded-full bg-orange-400/30" />
+                              <Fingerprint className="relative h-5 w-5 text-orange-500" />
+                            </span>}
+                        Entrar con huella
+                      </motion.button>
+                      {correoHuella && <p className="mt-2 text-center text-xs font-medium text-slate-400">{correoHuella}</p>}
+                    </motion.div>
                   )}
+
+                  <p className="mt-9 text-center text-sm font-medium text-slate-500">
+                    ¿Aún no tienes cuenta?{' '}
+                    <button onClick={() => cambiarVista('register')} className="font-black text-slate-900 transition hover:text-orange-600">
+                      Créala gratis
+                    </button>
+                  </p>
                 </motion.div>
               )}
 
-              <div className="mt-8 text-center">
-                <p className="text-gray-500 text-sm font-medium">¿Aún no tienes cuenta?</p>
-                <button onClick={() => { setView('register'); setNotification(null); }} className="text-gray-900 font-black text-sm hover:text-orange-600 transition-colors mt-1">Regístrate Gratis</button>
-              </div>
-            </motion.div>
-          )}
+              {/* ─────── REGISTRO ─────── */}
+              {view === 'register' && (
+                <motion.div key="register" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+                  <h1 className="text-[2rem] font-black leading-tight tracking-tight text-slate-950">
+                    Crea tu cuenta
+                  </h1>
+                  <p className="mt-2 font-medium text-slate-500">
+                    Un minuto y ya puedes pedir.
+                  </p>
 
-          {/* VISTA 2: REGISTRO */}
-          {view === 'register' && (
-            <motion.div key="register" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{duration: 0.3}}>
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Crear Cuenta</h2>
-                <p className="text-gray-500 mt-2 font-medium">Únete a la familia Jormard.</p>
-              </div>
+                  <Aviso notification={notification} />
 
-              {notification && (
-                 <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm font-bold">
-                    <AlertCircle className="w-4 h-4" /> {notification.msg}
-                 </div>
-              )}
+                  <form onSubmit={handleRegister} className="mt-8 space-y-4">
+                    <Campo icon={User} label="Nombre completo" type="text" value={fullName} onChange={setFullName} placeholder="Juan Pérez" />
+                    <Campo icon={Phone} label="Celular" type="tel" value={phone} onChange={setPhone} placeholder="999 999 999" />
+                    <Campo icon={Mail} label="Correo electrónico" type="email" value={email} onChange={setEmail} placeholder="tucorreo@ejemplo.com" />
 
-              <form onSubmit={handleRegister} className="space-y-4">
-                <InputGroup icon={<User/>} type="text" placeholder="Juan Pérez" value={fullName} onChange={setFullName} label="Nombre Completo" />
-                <InputGroup icon={<Phone/>} type="tel" placeholder="999 999 999" value={phone} onChange={setPhone} label="Celular" />
-                <InputGroup icon={<Mail/>} type="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={setEmail} label="Correo" />
-                
-                {/* Password en Registro con Ojo */}
-                <div className="relative">
-                    <InputGroup 
-                        icon={<Lock/>} 
-                        type={passwordVisible ? "text" : "password"} 
-                        placeholder="Crea una contraseña" 
-                        value={password} 
-                        onChange={setPassword} 
-                        label="Contraseña" 
-                    />
-                    <button 
-                        type="button"
-                        onClick={() => setPasswordVisible(!passwordVisible)}
-                        className="absolute right-4 top-[34px] text-gray-400 hover:text-orange-600 transition-colors focus:outline-none"
-                    >
-                        {passwordVisible ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-                        )}
+                    <div>
+                      <CampoPassword label="Contraseña" value={password} onChange={setPassword} ver={verPass} setVer={setVerPass} placeholder="Mínimo 6 caracteres" />
+                      {password && (
+                        <div className="mt-2.5">
+                          <div className="flex gap-1.5">
+                            {[1, 2, 3, 4].map(n => (
+                              <div key={n} className={`h-1 flex-1 rounded-full transition-colors ${n <= fuerza ? NIVELES[fuerza].color : 'bg-slate-200'}`} />
+                            ))}
+                          </div>
+                          <p className="mt-1.5 text-[11px] font-bold text-slate-400">
+                            Seguridad: <span className="text-slate-600">{NIVELES[fuerza].txt}</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2">
+                      <BotonPrincipal loading={loading} texto="Crear mi cuenta" />
+                    </div>
+                  </form>
+
+                  <p className="mt-7 text-center text-sm font-medium text-slate-500">
+                    ¿Ya tienes cuenta?{' '}
+                    <button onClick={() => cambiarVista('login')} className="font-black text-slate-900 transition hover:text-orange-600">
+                      Inicia sesión
                     </button>
-                </div>
-
-                <SubmitButton loading={loading} text="Registrarme" />
-              </form>
-
-              <div className="mt-6 text-center">
-                <button onClick={() => { setView('login'); setNotification(null); }} className="text-gray-500 font-bold text-sm hover:text-gray-900 transition-colors">Volver al Login</button>
-              </div>
-            </motion.div>
-          )}
-
-          {/* VISTA 3: RECUPERAR CONTRASEÑA */}
-          {view === 'forgot' && (
-            <motion.div key="forgot" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{duration: 0.3}}>
-               <div className="text-center mb-8">
-                <div className="inline-flex p-4 bg-blue-50 rounded-full mb-4 text-blue-600">
-                  <KeyRound className="w-8 h-8" />
-                </div>
-                <h2 className="text-2xl font-black text-gray-900">Recuperar Acceso</h2>
-                <p className="text-gray-500 mt-2 text-sm leading-relaxed">No te preocupes. Escribe tu correo y te enviaremos un enlace mágico para volver a entrar.</p>
-              </div>
-
-              {notification && (
-                 <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm font-bold">
-                    <AlertCircle className="w-4 h-4" /> {notification.msg}
-                 </div>
+                  </p>
+                </motion.div>
               )}
 
-              <form onSubmit={handleRecover} className="space-y-6">
-                <InputGroup icon={<Mail/>} type="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={setEmail} label="Correo Electrónico" />
-                <SubmitButton loading={loading} text="Enviar Enlace de Recuperación" />
-              </form>
+              {/* ─────── RECUPERAR ─────── */}
+              {view === 'forgot' && (
+                <motion.div key="forgot" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                    <KeyRound className="h-7 w-7" />
+                  </div>
+                  <h1 className="text-[2rem] font-black leading-tight tracking-tight text-slate-950">
+                    Recuperar acceso
+                  </h1>
+                  <p className="mt-2 font-medium leading-relaxed text-slate-500">
+                    Escribe tu correo y te enviamos un enlace para crear una contraseña nueva.
+                  </p>
 
-              <div className="mt-8 text-center">
-                <button onClick={() => { setView('login'); setNotification(null); }} className="text-gray-500 font-bold text-sm hover:text-gray-900 transition-colors">Cancelar y volver</button>
-              </div>
-            </motion.div>
-          )}
+                  <Aviso notification={notification} />
 
-          {/* VISTA 4: ÉXITO REGISTRO */}
-          {view === 'success_register' && (
-             <SuccessScreen 
-                title="¡Bienvenido!" 
-                desc={`Hemos enviado un correo a ${email}. Por favor confirma tu cuenta para continuar.`}
-                btnText="Volver al Login"
-                onBtnClick={() => setView('login')}
-             />
-          )}
+                  <form onSubmit={handleRecover} className="mt-8 space-y-5">
+                    <Campo icon={Mail} label="Correo electrónico" type="email" value={email} onChange={setEmail} placeholder="tucorreo@ejemplo.com" />
+                    <BotonPrincipal loading={loading} texto="Enviar enlace" />
+                  </form>
 
-          {/* VISTA 5: ÉXITO RECUPERACIÓN */}
-          {view === 'success_reset' && (
-             <SuccessScreen 
-                title="¡Correo Enviado!" 
-                desc={`Revisa tu bandeja de entrada en ${email}. Te hemos enviado un enlace para restablecer tu contraseña.`}
-                btnText="Entendido, volver"
-                onBtnClick={() => setView('login')}
-             />
-          )}
+                  <button onClick={() => cambiarVista('login')} className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold text-slate-400 transition hover:text-slate-900">
+                    <ArrowLeft className="h-4 w-4" /> Volver a iniciar sesión
+                  </button>
+                </motion.div>
+              )}
 
-        </AnimatePresence>
-      </motion.div>
+              {/* ─────── ÉXITOS ─────── */}
+              {view === 'success_register' && (
+                <PantallaExito
+                  titulo="¡Ya casi!"
+                  desc={`Enviamos un correo a ${email}. Confirma tu cuenta desde ahí y podrás entrar.`}
+                  textoBtn="Volver a iniciar sesión"
+                  onBtn={() => cambiarVista('login')}
+                />
+              )}
+
+              {view === 'success_reset' && (
+                <PantallaExito
+                  titulo="Correo enviado"
+                  desc={`Revisa tu bandeja en ${email}. Dentro está el enlace para poner una contraseña nueva.`}
+                  textoBtn="Entendido, volver"
+                  onBtn={() => cambiarVista('login')}
+                />
+              )}
+
+            </AnimatePresence>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
 
-// --- SUBCOMPONENTES REUTILIZABLES ---
+// ══════════════════════════════════════════════════════════
+// PIEZAS DEL FORMULARIO
+// ══════════════════════════════════════════════════════════
 
-// 1. Input Genérico con Estilo Moderno
-const InputGroup = ({ icon, type, placeholder, value, onChange, label }: any) => (
-    <div>
-        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide ml-1 mb-1.5 block">{label}</label>
-        <div className="relative group">
-            <div className="absolute left-3 top-3.5 text-gray-400 group-focus-within:text-orange-500 transition-colors">{icon}</div>
-            <input 
-                type={type} 
-                value={value} 
-                onChange={(e) => onChange(e.target.value)} 
-                className="w-full bg-gray-50/50 border border-gray-200 text-gray-900 rounded-xl py-3 pl-10 pr-12 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all font-medium placeholder-gray-400"
-                placeholder={placeholder}
-                required
-            />
-        </div>
+const Campo = ({ icon: Icon, label, type, value, onChange, placeholder }: {
+  icon: any; label: string; type: string; value: string;
+  onChange: (v: string) => void; placeholder: string;
+}) => (
+  <div>
+    <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-400">{label}</label>
+    <div className="group relative">
+      <Icon className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-300 transition-colors group-focus-within:text-orange-500" />
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required
+        className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50/60 py-3.5 pl-12 pr-4 font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-300 focus:border-orange-400 focus:bg-white"
+      />
     </div>
+  </div>
 );
 
-// 2. Botón de Envío con Gradiente
-const SubmitButton = ({ loading, text }: { loading: boolean, text: string }) => (
-    <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        className="w-full bg-gray-900 hover:bg-black text-white font-bold py-4 rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-        disabled={loading}
-    >
-        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>{text} <ArrowRight className="w-5 h-5" /></>}
-    </motion.button>
+const CampoPassword = ({ label, value, onChange, ver, setVer, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void;
+  ver: boolean; setVer: (v: boolean) => void; placeholder: string;
+}) => (
+  <div>
+    <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-400">{label}</label>
+    <div className="group relative">
+      <Lock className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-300 transition-colors group-focus-within:text-orange-500" />
+      <input
+        type={ver ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required
+        className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50/60 py-3.5 pl-12 pr-12 font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-300 focus:border-orange-400 focus:bg-white"
+      />
+      <button
+        type="button"
+        onClick={() => setVer(!ver)}
+        aria-label={ver ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"
+      >
+        {ver ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+      </button>
+    </div>
+  </div>
 );
 
-// 3. Pantalla de Éxito Genérica
-const SuccessScreen = ({ title, desc, btnText, onBtnClick }: any) => (
-    <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
-        <div className="relative inline-block mb-6">
-            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-75"></div>
-            <div className="relative bg-green-100 p-5 rounded-full text-green-600"><MailCheck className="w-12 h-12" /></div>
+const BotonPrincipal = ({ loading, texto }: { loading: boolean; texto: string }) => (
+  <motion.button
+    whileHover={{ scale: 1.015 }}
+    whileTap={{ scale: 0.98 }}
+    disabled={loading}
+    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 py-4 font-black text-white shadow-xl shadow-slate-900/15 transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+  >
+    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>{texto} <ArrowRight className="h-[18px] w-[18px]" /></>}
+  </motion.button>
+);
+
+const Aviso = ({ notification }: { notification: { msg: string, type: 'error' | 'success' } | null }) => (
+  <AnimatePresence>
+    {notification && (
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: 'auto' }}
+        exit={{ opacity: 0, height: 0 }}
+        className="overflow-hidden"
+      >
+        <div className={`mt-6 flex items-start gap-3 rounded-2xl border p-4 text-sm font-bold ${
+          notification.type === 'error'
+            ? 'border-red-100 bg-red-50 text-red-600'
+            : 'border-emerald-100 bg-emerald-50 text-emerald-600'
+        }`}>
+          {notification.type === 'error'
+            ? <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0" />
+            : <CheckCircle2 className="mt-0.5 h-[18px] w-[18px] shrink-0" />}
+          <span className="leading-snug">{notification.msg}</span>
         </div>
-        <h2 className="text-2xl font-black text-gray-900 mb-2">{title}</h2>
-        <p className="text-gray-500 mb-8 leading-relaxed font-medium">{desc}</p>
-        
-        <div className="space-y-3">
-            <a href="https://mail.google.com/" target="_blank" className="w-full bg-red-50 text-red-600 hover:bg-red-100 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors border border-red-100">
-                <Mail className="w-5 h-5" /> Abrir Gmail <ExternalLink className="w-4 h-4 opacity-50" />
-            </a>
-            <button onClick={onBtnClick} className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold py-3.5 rounded-xl transition-colors">
-                {btnText}
-            </button>
-        </div>
-    </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+const Separador = () => (
+  <div className="mb-5 flex items-center gap-3">
+    <div className="h-px flex-1 bg-slate-200" />
+    <span className="text-[11px] font-black uppercase tracking-widest text-slate-300">o</span>
+    <div className="h-px flex-1 bg-slate-200" />
+  </div>
+);
+
+const PantallaExito = ({ titulo, desc, textoBtn, onBtn }: {
+  titulo: string; desc: string; textoBtn: string; onBtn: () => void;
+}) => (
+  <motion.div key="exito" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
+    <div className="relative mx-auto mb-7 inline-block">
+      <div className="absolute inset-0 animate-ping rounded-full bg-emerald-100 opacity-75" />
+      <div className="relative rounded-full bg-emerald-50 p-5 text-emerald-600">
+        <MailCheck className="h-11 w-11" />
+      </div>
+    </div>
+    <h1 className="text-[1.75rem] font-black tracking-tight text-slate-950">{titulo}</h1>
+    <p className="mx-auto mt-3 max-w-sm font-medium leading-relaxed text-slate-500">{desc}</p>
+
+    <div className="mt-9 space-y-3">
+      <a
+        href="https://mail.google.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white py-3.5 font-black text-slate-900 transition hover:border-slate-300 hover:bg-slate-50"
+      >
+        <Mail className="h-[18px] w-[18px]" /> Abrir Gmail
+        <ExternalLink className="h-4 w-4 opacity-40" />
+      </a>
+      <button
+        onClick={onBtn}
+        className="w-full rounded-2xl bg-slate-950 py-3.5 font-black text-white transition hover:bg-black"
+      >
+        {textoBtn}
+      </button>
+    </div>
+  </motion.div>
 );

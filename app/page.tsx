@@ -5,126 +5,162 @@ import Link from "next/link";
 import { AnimatePresence, motion, Transition, Variants } from "framer-motion";
 import {
   ArrowRight,
+  Bell,
   Bike,
   CheckCircle2,
-  Clock3,
   Download,
+  Fingerprint,
+  Heart,
   MapPin,
   MessageCircle,
+  Mic,
+  Package,
   Phone,
+  ReceiptText,
+  Search,
   Shield,
   ShoppingBag,
   ShoppingCart,
   Sparkles,
-  Star,
   Store,
   Smartphone,
   Truck,
   Wallet,
   X,
-  Zap,
 } from "lucide-react";
 
 const PLAY_STORE_URL =
   "https://play.google.com/store/apps/details?id=com.jormard.bodega&pcampaignid=web_share";
+const WHATSAPP_URL = "https://wa.me/51961241085";
+
+// Categorías reales del catálogo, con el número de productos que hay en cada una.
+const CATEGORIAS = [
+  { nombre: "Abarrotes", cantidad: 116, emoji: "🛒" },
+  { nombre: "Bebidas", cantidad: 99, emoji: "🥤" },
+  { nombre: "Cuidado personal", cantidad: 77, emoji: "🧴" },
+  { nombre: "Aseo y limpieza", cantidad: 65, emoji: "🧽" },
+  { nombre: "Licores", cantidad: 64, emoji: "🍷" },
+  { nombre: "Snacks", cantidad: 50, emoji: "🍿" },
+  { nombre: "Galletas", cantidad: 45, emoji: "🍪" },
+  { nombre: "Caramelos", cantidad: 40, emoji: "🍬" },
+  { nombre: "Lácteos", cantidad: 27, emoji: "🥛" },
+  { nombre: "Chocolates", cantidad: 23, emoji: "🍫" },
+  { nombre: "Útiles escolares", cantidad: 20, emoji: "✏️" },
+  { nombre: "Mascotas", cantidad: 11, emoji: "🐶" },
+];
+
+const FUNCIONES = [
+  {
+    icon: Package,
+    titulo: "Sigue tu pedido en vivo",
+    desc: "Recibido, pagado, preparando y enviado. Ves en qué va sin llamar a nadie.",
+    color: "text-indigo-600",
+    bg: "bg-indigo-50",
+  },
+  {
+    icon: Bell,
+    titulo: "Te avisamos de todo",
+    desc: "Una campana con las ofertas nuevas y cada cambio de tu pedido, agrupado y sin ruido.",
+    color: "text-orange-600",
+    bg: "bg-orange-50",
+  },
+  {
+    icon: ReceiptText,
+    titulo: "Comprobante en PDF",
+    desc: "Descarga el detalle de cada compra o compártelo por WhatsApp cuando lo necesites.",
+    color: "text-emerald-600",
+    bg: "bg-emerald-50",
+  },
+  {
+    icon: Mic,
+    titulo: "Busca hablando",
+    desc: "¿Con las manos ocupadas? Dile lo que necesitas y aparece en pantalla.",
+    color: "text-rose-600",
+    bg: "bg-rose-50",
+  },
+  {
+    icon: Fingerprint,
+    titulo: "Entra con tu huella",
+    desc: "Sin escribir contraseñas cada vez. Tu sesión queda lista y protegida.",
+    color: "text-sky-600",
+    bg: "bg-sky-50",
+  },
+  {
+    icon: Heart,
+    titulo: "Guarda tus favoritos",
+    desc: "Lo que compras siempre, a un toque. Y puedes repetir un pedido anterior completo.",
+    color: "text-fuchsia-600",
+    bg: "bg-fuchsia-50",
+  },
+];
 
 export default function Home() {
   const [showPolicy, setShowPolicy] = useState(false);
 
   const fadeInUp: Variants = {
-    hidden: { opacity: 0, y: 32 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.7, ease: "easeOut" },
-    },
+    hidden: { opacity: 0, y: 28 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.65, ease: "easeOut" } },
   };
 
   const staggerContainer: Variants = {
     hidden: {},
-    visible: {
-      transition: {
-        staggerChildren: 0.12,
-      },
-    },
+    visible: { transition: { staggerChildren: 0.1 } },
   };
 
   const floatingPhone: Variants = {
     animate: {
-      y: [0, -12, 0],
-      rotate: [0, -1, 0],
-      transition: {
-        duration: 5,
-        repeat: Infinity,
-        ease: "easeInOut",
-      },
+      y: [0, -14, 0],
+      transition: { duration: 6, repeat: Infinity, ease: "easeInOut" },
     },
   };
 
-  const badgeFloat: Variants = {
-    animate: {
-      y: [0, -8, 0],
-      transition: {
-        duration: 3.4,
-        repeat: Infinity,
-        ease: "easeInOut",
-      },
-    },
-  };
-
-  const springTransition: Transition = {
-    type: "spring",
-    stiffness: 220,
-    damping: 18,
-  };
-
-  const cardHover = {
-    whileHover: { y: -8, scale: 1.015 },
-    transition: springTransition,
-  };
+  const springTransition: Transition = { type: "spring", stiffness: 220, damping: 20 };
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#fffaf5] text-slate-900">
-      {/* Fondo premium */}
+    <div className="relative min-h-screen overflow-x-hidden bg-[#FDFBF7] text-slate-900">
+      {/* ── Fondo ── */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.12),transparent_28%),radial-gradient(circle_at_80%_18%,rgba(244,63,94,0.10),transparent_22%),radial-gradient(circle_at_20%_85%,rgba(250,204,21,0.08),transparent_25%)]" />
-        <div className="absolute -top-32 right-[-8%] h-[34rem] w-[34rem] rounded-full bg-orange-300/20 blur-[140px]" />
-        <div className="absolute bottom-[-10%] left-[-10%] h-[28rem] w-[28rem] rounded-full bg-yellow-300/20 blur-[120px]" />
-        <div className="absolute left-1/2 top-1/3 h-[22rem] w-[22rem] -translate-x-1/2 rounded-full bg-rose-300/10 blur-[120px]" />
-        <div className="absolute inset-0 opacity-[0.05] [background-image:linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] [background-size:56px_56px]" />
+        <div className="absolute -top-40 right-[-10%] h-[36rem] w-[36rem] rounded-full bg-orange-300/25 blur-[150px]" />
+        <div className="absolute bottom-[-15%] left-[-12%] h-[30rem] w-[30rem] rounded-full bg-amber-300/20 blur-[130px]" />
+        <div className="absolute left-1/2 top-1/4 h-[24rem] w-[24rem] -translate-x-1/2 rounded-full bg-rose-300/10 blur-[130px]" />
+        <div className="absolute inset-0 opacity-[0.04] [background-image:linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] [background-size:60px_60px]" />
       </div>
 
-      {/* Navbar */}
+      {/* ── Navbar ── */}
       <motion.nav
-        initial={{ y: -80, opacity: 0 }}
+        initial={{ y: -70, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.7, ease: "easeOut" }}
-        className="fixed left-0 top-0 z-50 flex w-full justify-center px-4 py-5"
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="fixed left-0 top-0 z-50 flex w-full justify-center px-4 py-4"
       >
-        <div className="flex w-full max-w-7xl items-center justify-between rounded-full border border-white/70 bg-white/70 px-4 py-3 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur-2xl md:px-6">
+        <div className="flex w-full max-w-6xl items-center justify-between rounded-full border border-white/70 bg-white/75 px-4 py-2.5 shadow-[0_12px_40px_rgba(15,23,42,0.07)] backdrop-blur-2xl md:px-6">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 p-2.5 text-white shadow-lg shadow-orange-300/40">
+            <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 p-2.5 text-white shadow-lg shadow-orange-300/40">
               <Store className="h-5 w-5" />
             </div>
-
             <div className="leading-none">
-              <span className="block text-lg font-black tracking-tight text-slate-900">
+              <span className="block text-[17px] font-black tracking-tight text-slate-900">
                 Bodega Jormard
               </span>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Delivery App
+              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">
+                Ferreñafe
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-4">
-            <button
-              onClick={() => setShowPolicy(true)}
+          <div className="flex items-center gap-1.5 md:gap-3">
+            <a
+              href="#catalogo"
               className="hidden rounded-full px-4 py-2 text-sm font-bold text-slate-500 transition hover:bg-orange-50 hover:text-orange-600 md:inline-flex"
             >
-              Seguridad
-            </button>
-
+              Catálogo
+            </a>
+            <a
+              href="#app"
+              className="hidden rounded-full px-4 py-2 text-sm font-bold text-slate-500 transition hover:bg-orange-50 hover:text-orange-600 md:inline-flex"
+            >
+              La app
+            </a>
             <Link href="/login">
               <motion.button
                 whileHover={{ scale: 1.04 }}
@@ -138,45 +174,44 @@ export default function Home() {
         </div>
       </motion.nav>
 
-      {/* Hero */}
-      <header className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl items-center px-6 pb-16 pt-32 md:pt-36">
+      {/* ── Hero ── */}
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center px-6 pb-20 pt-32 md:pt-40">
         <motion.div
           variants={staggerContainer}
           initial="hidden"
           animate="visible"
-          className="grid w-full items-center gap-14 lg:grid-cols-[1.05fr_0.95fr]"
+          className="grid w-full items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]"
         >
-          {/* Texto */}
           <div className="text-center lg:text-left">
             <motion.div
               variants={fadeInUp}
-              className="mb-6 inline-flex items-center gap-2 rounded-full border border-green-200 bg-white/80 px-4 py-2 shadow-sm backdrop-blur-md"
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-4 py-2 shadow-sm backdrop-blur-md"
             >
               <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
               </span>
-              <span className="text-xs font-black uppercase tracking-[0.22em] text-green-700">
-                Ya disponible en Google Play
+              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                Repartimos en Ferreñafe
               </span>
             </motion.div>
 
             <motion.h1
               variants={fadeInUp}
-              className="max-w-3xl text-5xl font-black leading-[0.98] tracking-[-0.04em] text-slate-950 md:text-7xl"
+              className="text-[2.75rem] font-black leading-[1.02] tracking-[-0.035em] text-slate-950 md:text-[4.25rem]"
             >
-              Tu bodega favorita,
-              <span className="mt-2 block bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 bg-clip-text text-transparent">
-                ahora más rápida, elegante y premium.
+              Tu bodega de siempre,
+              <span className="mt-2 block bg-gradient-to-r from-orange-500 via-red-500 to-rose-500 bg-clip-text text-transparent">
+                ahora a un toque.
               </span>
             </motion.h1>
 
             <motion.p
               variants={fadeInUp}
-              className="mx-auto mt-6 max-w-2xl text-base font-medium leading-8 text-slate-500 md:text-xl lg:mx-0"
+              className="mx-auto mt-6 max-w-xl text-base font-medium leading-8 text-slate-500 md:text-lg lg:mx-0"
             >
-              Pide abarrotes, bebidas y snacks con una experiencia visual moderna.
-              Compra desde la web o la app y paga con{" "}
+              Abarrotes, bebidas, snacks y limpieza con entrega a tu casa o
+              recojo en tienda. Paga con{" "}
               <span className="font-extrabold text-slate-800">
                 Yape, Plin o efectivo
               </span>
@@ -185,19 +220,16 @@ export default function Home() {
 
             <motion.div
               variants={fadeInUp}
-              className="mt-8 flex flex-col items-center gap-4 sm:flex-row lg:items-start lg:justify-start"
+              className="mt-9 flex flex-col items-center gap-3 sm:flex-row lg:items-start lg:justify-start"
             >
               <Link href="/login" className="w-full sm:w-auto">
                 <motion.button
-                  whileHover={{
-                    scale: 1.03,
-                    boxShadow: "0 24px 45px rgba(249,115,22,0.28)",
-                  }}
+                  whileHover={{ scale: 1.03, boxShadow: "0 24px 45px rgba(249,115,22,0.28)" }}
                   whileTap={{ scale: 0.96 }}
-                  className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 px-8 py-4 text-lg font-extrabold text-white shadow-2xl shadow-orange-300/30"
+                  className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-8 py-4 text-[17px] font-extrabold text-white shadow-2xl shadow-orange-300/30"
                 >
                   <ShoppingCart className="h-5 w-5" />
-                  Pedir por la web
+                  Empezar a pedir
                 </motion.button>
               </Link>
 
@@ -207,73 +239,35 @@ export default function Home() {
                 rel="noopener noreferrer"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
-                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/70 bg-white/85 px-6 py-4 text-sm font-extrabold text-slate-900 shadow-xl shadow-slate-200/50 backdrop-blur-xl sm:w-auto"
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/70 bg-white/85 px-6 py-3.5 font-extrabold text-slate-900 shadow-xl shadow-slate-200/50 backdrop-blur-xl sm:w-auto"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500 text-white shadow-md">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white">
                   <Download className="h-5 w-5" />
                 </div>
                 <div className="text-left">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     Descargar
                   </p>
-                  <p className="text-sm font-black text-slate-900">
-                    App en Google Play
-                  </p>
+                  <p className="text-sm font-black text-slate-900">App en Google Play</p>
                 </div>
               </motion.a>
             </motion.div>
 
+            {/* Datos reales, nada inventado */}
             <motion.div
               variants={fadeInUp}
-              className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start"
+              className="mt-11 grid grid-cols-3 gap-3 border-t border-slate-200/70 pt-7"
             >
               {[
-                {
-                  icon: <Truck className="h-4 w-4" />,
-                  label: "Delivery rápido",
-                  bg: "bg-green-50",
-                  color: "text-green-700",
-                },
-                {
-                  icon: <Shield className="h-4 w-4" />,
-                  label: "Compra segura",
-                  bg: "bg-blue-50",
-                  color: "text-blue-700",
-                },
-                {
-                  icon: <Wallet className="h-4 w-4" />,
-                  label: "Pagos simples",
-                  bg: "bg-orange-50",
-                  color: "text-orange-700",
-                },
+                { valor: "686", label: "productos" },
+                { valor: "30–45", label: "min de entrega" },
+                { valor: "3", label: "formas de pago" },
               ].map((item) => (
-                <div
-                  key={item.label}
-                  className={`flex items-center gap-2 rounded-full border border-white/60 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] shadow-sm backdrop-blur-md ${item.bg} ${item.color}`}
-                >
-                  {item.icon}
-                  {item.label}
-                </div>
-              ))}
-            </motion.div>
-
-            <motion.div
-              variants={fadeInUp}
-              className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3"
-            >
-              {[
-                { value: "15 min", label: "Entrega promedio" },
-                { value: "4.9★", label: "Calificación" },
-                { value: "24/7", label: "Pedidos por WhatsApp" },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-[0_10px_35px_rgba(15,23,42,0.06)] backdrop-blur-xl"
-                >
-                  <p className="text-2xl font-black tracking-tight text-slate-950">
-                    {item.value}
+                <div key={item.label} className="text-center lg:text-left">
+                  <p className="text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
+                    {item.valor}
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">
+                  <p className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
                     {item.label}
                   </p>
                 </div>
@@ -281,197 +275,303 @@ export default function Home() {
             </motion.div>
           </div>
 
-          {/* Mockup */}
+          {/* ── Mockup: refleja la app de verdad ── */}
           <motion.div
             variants={floatingPhone}
             animate="animate"
             className="relative hidden items-center justify-center lg:flex"
           >
-            <div className="absolute h-[540px] w-[540px] rounded-full bg-gradient-to-tr from-orange-200/50 via-pink-200/40 to-yellow-200/40 blur-3xl" />
+            <div className="absolute h-[520px] w-[520px] rounded-full bg-gradient-to-tr from-orange-200/50 via-rose-200/40 to-amber-200/40 blur-3xl" />
 
-            <motion.div
-              variants={badgeFloat}
-              animate="animate"
-              className="absolute left-0 top-16 z-20 rounded-3xl border border-white/80 bg-white/80 p-4 shadow-2xl backdrop-blur-xl"
-            >
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-orange-100 p-3 text-orange-600">
-                  <Zap className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Pedido instantáneo
-                  </p>
-                  <p className="text-xs font-semibold text-slate-500">
-                    Confirmación rápida
-                  </p>
-                </div>
-              </div>
-            </motion.div>
+            <div className="relative z-10 h-[620px] w-[300px] overflow-hidden rounded-[3.2rem] border-[9px] border-slate-950 bg-white shadow-[0_45px_90px_-20px_rgba(15,23,42,0.45)]">
+              <div className="absolute left-1/2 top-2.5 z-20 h-5 w-24 -translate-x-1/2 rounded-full bg-slate-950" />
 
-            <motion.div
-              variants={badgeFloat}
-              animate="animate"
-              transition={{ delay: 0.8 }}
-              className="absolute -right-3 top-32 z-20 rounded-3xl border border-white/80 bg-white/85 p-4 shadow-2xl backdrop-blur-xl"
-            >
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-yellow-100 p-3 text-yellow-600">
-                  <Star className="h-5 w-5 fill-yellow-500" />
-                </div>
-                <div>
-                  <p className="text-lg font-black leading-none text-slate-950">
-                    4.9
-                  </p>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                    Rating
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-
-            <div className="relative z-10 h-[640px] w-[320px] overflow-hidden rounded-[3.4rem] border-[10px] border-slate-950 bg-slate-950 shadow-[0_45px_90px_-20px_rgba(15,23,42,0.45)]">
-              <div className="absolute left-1/2 top-3 h-6 w-28 -translate-x-1/2 rounded-full bg-slate-900" />
-
-              <div className="h-full w-full bg-[linear-gradient(180deg,#ffffff_0%,#fffaf5_100%)]">
-                <div className="flex items-center justify-between px-5 pb-2 pt-4 text-[11px] font-black text-slate-500">
-                  <span>9:41</span>
-                  <span>5G • 100%</span>
-                </div>
-
-                <div className="px-4 pb-5">
-                  <div className="mb-4 rounded-[1.8rem] bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 p-5 text-white shadow-xl shadow-orange-200">
-                    <div className="mb-4 flex items-center justify-between">
-                      <div className="rounded-2xl bg-white/20 p-2">
-                        <Store className="h-5 w-5" />
-                      </div>
-                      <div className="rounded-full bg-white/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em]">
-                        Promo
-                      </div>
-                    </div>
-
-                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/80">
-                      Bodega Jormard
-                    </p>
-                    <h3 className="mt-1 text-2xl font-black leading-tight">
-                      Compra fácil,
-                      <br />
-                      recibe rápido.
-                    </h3>
+              {/* Cabecera de la tienda */}
+              <div className="bg-white px-4 pb-3 pt-9">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400">Hola, César 👋</p>
+                    <p className="text-[15px] font-black text-slate-900">¿Qué deseas hoy?</p>
                   </div>
-
-                  <div className="mb-4 flex items-center gap-2 overflow-hidden rounded-2xl border border-orange-100 bg-white px-4 py-3 shadow-sm">
-                    <ShoppingBag className="h-4 w-4 text-orange-500" />
-                    <span className="text-sm font-semibold text-slate-400">
-                      Busca tus productos...
+                  <div className="relative rounded-xl bg-slate-50 p-2">
+                    <Bell className="h-4 w-4 text-slate-700" />
+                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[7px] font-black text-white ring-2 ring-white">
+                      2
                     </span>
                   </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5">
+                  <Search className="h-3.5 w-3.5 text-slate-400" />
+                  <span className="text-[11px] font-medium text-slate-400">
+                    Buscar bebidas, snacks…
+                  </span>
+                  <Mic className="ml-auto h-3.5 w-3.5 text-orange-500" />
+                </div>
+              </div>
 
-                  <div className="mb-4 flex gap-2">
-                    {["Ofertas", "Bebidas", "Snacks"].map((item, i) => (
-                      <div
-                        key={item}
-                        className={`rounded-full px-4 py-2 text-xs font-black ${
-                          i === 0
-                            ? "bg-slate-950 text-white"
-                            : "bg-white text-slate-600 shadow-sm"
-                        }`}
-                      >
-                        {item}
+              {/* Seguimiento del pedido */}
+              <div className="px-4 pb-3">
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+                  <div className="mb-2.5 flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-900">Pedido #14</span>
+                    <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[7px] font-black tracking-wide text-white">
+                      EN CAMINO
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    {["Recibido", "Pagado", "Preparando", "Enviado"].map((paso, i) => (
+                      <div key={paso} className="flex flex-1 flex-col items-center">
+                        <div className="flex w-full items-center">
+                          <div className={`h-0.5 flex-1 ${i === 0 ? "bg-transparent" : "bg-indigo-500"}`} />
+                          <div
+                            className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                              i <= 2 ? "bg-indigo-600" : "bg-slate-200"
+                            }`}
+                          >
+                            <CheckCircle2 className="h-2.5 w-2.5 text-white" />
+                          </div>
+                          <div className={`h-0.5 flex-1 ${i === 3 ? "bg-transparent" : i < 2 ? "bg-indigo-500" : "bg-slate-200"}`} />
+                        </div>
+                        <span className="mt-1 text-[6.5px] font-bold text-slate-500">{paso}</span>
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    {[1, 2, 3, 4].map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-3xl border border-slate-100 bg-white p-3 shadow-sm"
-                      >
-                        <div className="mb-3 h-24 rounded-2xl bg-gradient-to-br from-orange-100 via-rose-50 to-yellow-100" />
-                        <div className="mb-2 h-3 w-20 rounded-full bg-slate-200" />
-                        <div className="mb-3 h-2 w-14 rounded-full bg-slate-100" />
-                        <div className="flex items-center justify-between">
-                          <div className="h-4 w-10 rounded-full bg-orange-300" />
-                          <div className="rounded-full bg-slate-950 p-2 text-white">
-                            <ShoppingCart className="h-3 w-3" />
-                          </div>
+              {/* Productos */}
+              <div className="px-4">
+                <div className="mb-2 flex gap-1.5">
+                  {["Todos", "Ofertas", "Bebidas"].map((c, i) => (
+                    <div
+                      key={c}
+                      className={`rounded-full px-2.5 py-1 text-[9px] font-black ${
+                        i === 0 ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {c}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { n: "Chocolatada Bonlé", p: "2.20", d: null },
+                    { n: "Gaseosa Inka Kola", p: "3.50", d: "-15%" },
+                    { n: "Galleta Soda Field", p: "1.20", d: null },
+                    { n: "Atún Florida", p: "5.90", d: "-10%" },
+                  ].map((prod) => (
+                    <div key={prod.n} className="relative rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+                      {prod.d && (
+                        <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-rose-500 px-1.5 py-0.5 text-[6.5px] font-black text-white">
+                          {prod.d}
+                        </span>
+                      )}
+                      <div className="mb-1.5 h-14 rounded-xl bg-gradient-to-br from-orange-50 via-rose-50 to-amber-50" />
+                      <p className="truncate text-[8.5px] font-bold text-slate-700">{prod.n}</p>
+                      <div className="mt-1 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-900">S/ {prod.p}</span>
+                        <div className="rounded-full bg-slate-950 p-1 text-white">
+                          <ShoppingCart className="h-2 w-2" />
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
+              </div>
 
-                <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-6 rounded-full border border-white/80 bg-white/90 px-6 py-3 shadow-2xl backdrop-blur-xl">
-                  <Store className="h-5 w-5 text-orange-500" />
-                  <ShoppingCart className="h-5 w-5 text-slate-800" />
-                  <Phone className="h-5 w-5 text-slate-800" />
-                </div>
+              {/* Barra inferior */}
+              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-5 rounded-full border border-white/80 bg-white/95 px-5 py-2.5 shadow-2xl backdrop-blur-xl">
+                <Store className="h-4 w-4 text-orange-500" />
+                <Heart className="h-4 w-4 text-slate-300" />
+                <ShoppingBag className="h-4 w-4 text-slate-300" />
+                <Bell className="h-4 w-4 text-slate-300" />
               </div>
             </div>
           </motion.div>
         </motion.div>
       </header>
 
-      {/* Barra premium */}
-      <section className="relative z-10 border-y border-white/50 bg-white/65 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-7xl gap-4 px-6 py-6 md:grid-cols-4">
+      {/* ── Franja de confianza ── */}
+      <section className="relative z-10 border-y border-white/60 bg-white/70 backdrop-blur-xl">
+        <div className="mx-auto grid max-w-6xl gap-3 px-6 py-6 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            {
-              icon: <Clock3 className="h-5 w-5" />,
-              title: "Entrega veloz",
-              desc: "Pedidos listos en minutos",
-            },
-            {
-              icon: <Shield className="h-5 w-5" />,
-              title: "Mayor confianza",
-              desc: "Tus datos protegidos",
-            },
-            {
-              icon: <Wallet className="h-5 w-5" />,
-              title: "Pagos fáciles",
-              desc: "Yape, Plin y efectivo",
-            },
-            {
-              icon: <Sparkles className="h-5 w-5" />,
-              title: "Experiencia premium",
-              desc: "Diseño elegante y moderno",
-            },
+            { icon: Truck, title: "Delivery a domicilio", desc: "En 30 a 45 minutos" },
+            { icon: Store, title: "O recoge en tienda", desc: "Te avisamos al estar listo" },
+            { icon: Wallet, title: "Yape, Plin o efectivo", desc: "Paga como prefieras" },
+            { icon: Shield, title: "Tus datos protegidos", desc: "Solo lo necesario del pedido" },
           ].map((item) => (
-            <div
-              key={item.title}
-              className="flex items-center gap-4 rounded-3xl border border-white/70 bg-white/70 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.05)]"
-            >
-              <div className="rounded-2xl bg-gradient-to-br from-orange-100 to-rose-100 p-3 text-orange-600">
-                {item.icon}
+            <div key={item.title} className="flex items-center gap-3.5 rounded-2xl border border-white/70 bg-white/70 p-4">
+              <div className="rounded-xl bg-gradient-to-br from-orange-100 to-rose-100 p-2.5 text-orange-600">
+                <item.icon className="h-5 w-5" />
               </div>
-              <div>
-                <p className="font-black text-slate-900">{item.title}</p>
-                <p className="text-sm font-medium text-slate-500">{item.desc}</p>
+              <div className="min-w-0">
+                <p className="text-[15px] font-black leading-tight text-slate-900">{item.title}</p>
+                <p className="text-[13px] font-medium text-slate-500">{item.desc}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* App download */}
-      <section
-        id="descarga"
-        className="relative z-10 overflow-hidden bg-slate-950 py-20 text-white"
-      >
-        <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:24px_24px]" />
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-8 px-6 md:flex-row">
-          <div className="max-w-2xl text-center md:text-left">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.25em] text-orange-300">
-              <Smartphone className="h-4 w-4" />
-              App oficial
-            </div>
-            <h2 className="text-3xl font-black tracking-tight md:text-5xl">
-              Descarga la app y compra más rápido.
+      {/* ── Catálogo ── */}
+      <section id="catalogo" className="relative z-10 py-24">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-14 text-center">
+            <span className="inline-flex rounded-full bg-orange-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-orange-600">
+              El catálogo
+            </span>
+            <h2 className="mt-4 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
+              686 productos, ordenados
             </h2>
-            <p className="mt-4 text-base leading-8 text-slate-300 md:text-lg">
-              Accede a promociones, seguimiento de pedidos y una experiencia
-              mucho más fluida desde tu celular.
+            <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-slate-500">
+              Lo mismo que encuentras en el mostrador, pero con buscador, ofertas
+              del día y tus favoritos guardados.
+            </p>
+          </div>
+
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-80px" }}
+            variants={staggerContainer}
+            className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+          >
+            {CATEGORIAS.map((cat) => (
+              <motion.div
+                key={cat.nombre}
+                variants={fadeInUp}
+                whileHover={{ y: -6 }}
+                transition={springTransition}
+                className="group cursor-default rounded-3xl border border-slate-100 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.05)]"
+              >
+                <span className="text-3xl">{cat.emoji}</span>
+                <p className="mt-3 text-[15px] font-black leading-tight text-slate-900">
+                  {cat.nombre}
+                </p>
+                <p className="mt-0.5 text-xs font-semibold text-slate-400">
+                  {cat.cantidad} productos
+                </p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── Qué puedes hacer ── */}
+      <section id="app" className="relative z-10 bg-white/70 py-24 backdrop-blur-xl">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-14 text-center">
+            <span className="inline-flex rounded-full bg-indigo-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-indigo-600">
+              En la app y en la web
+            </span>
+            <h2 className="mt-4 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
+              Todo lo que puedes hacer
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-slate-500">
+              Las mismas funciones en el celular y en la computadora. Empieza en
+              una y sigue en la otra.
+            </p>
+          </div>
+
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-80px" }}
+            variants={staggerContainer}
+            className="grid gap-5 md:grid-cols-2 lg:grid-cols-3"
+          >
+            {FUNCIONES.map((f) => (
+              <motion.div
+                key={f.titulo}
+                variants={fadeInUp}
+                whileHover={{ y: -8 }}
+                transition={springTransition}
+                className="rounded-[1.75rem] border border-slate-100 bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,0.06)]"
+              >
+                <div className={`mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${f.bg} ${f.color}`}>
+                  <f.icon className="h-7 w-7" />
+                </div>
+                <h3 className="text-lg font-black tracking-tight text-slate-950">{f.titulo}</h3>
+                <p className="mt-2 text-sm leading-7 text-slate-500">{f.desc}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── Cómo funciona ── */}
+      <section className="relative z-10 py-24">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-14 text-center">
+            <span className="inline-flex rounded-full bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">
+              Cómo funciona
+            </span>
+            <h2 className="mt-4 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
+              Tu pedido en 3 pasos
+            </h2>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {[
+              {
+                icon: Smartphone,
+                n: "01",
+                title: "Arma tu pedido",
+                desc: "Busca por nombre o por voz, mira las ofertas del día y ve agregando al carrito.",
+              },
+              {
+                icon: CheckCircle2,
+                n: "02",
+                title: "Elige y confirma",
+                desc: "Delivery a tu dirección o recojo en tienda. Paga con Yape, Plin o en efectivo.",
+              },
+              {
+                icon: Bike,
+                n: "03",
+                title: "Sigue la entrega",
+                desc: "Te avisamos en cada paso hasta que llegue a tu puerta. Y queda tu comprobante.",
+              },
+            ].map((item, i) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 26 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.12, duration: 0.6 }}
+                className="relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white p-8 shadow-[0_18px_60px_rgba(15,23,42,0.06)]"
+              >
+                <span className="absolute -right-2 -top-5 text-[6rem] font-black leading-none text-slate-50">
+                  {item.n}
+                </span>
+                <div className="relative">
+                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-200">
+                    <item.icon className="h-7 w-7" />
+                  </div>
+                  <h3 className="text-xl font-black tracking-tight text-slate-950">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-7 text-slate-500">{item.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Descarga ── */}
+      <section className="relative z-10 overflow-hidden bg-slate-950 py-20 text-white">
+        <div className="absolute inset-0 opacity-[0.18] [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:26px_26px]" />
+        <div className="absolute -left-20 top-10 h-72 w-72 rounded-full bg-orange-500/20 blur-[100px]" />
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center justify-between gap-10 px-6 md:flex-row">
+          <div className="max-w-xl text-center md:text-left">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-orange-300">
+              <Smartphone className="h-4 w-4" />
+              App para Android
+            </div>
+            <h2 className="text-3xl font-black tracking-tight md:text-[2.75rem] md:leading-[1.1]">
+              Descárgala y pide más rápido.
+            </h2>
+            <p className="mt-4 text-base leading-8 text-slate-300">
+              Notificaciones cuando avanza tu pedido, entrada con huella y tus
+              favoritos siempre a mano.
             </p>
           </div>
 
@@ -479,175 +579,107 @@ export default function Home() {
             href={PLAY_STORE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            whileHover={{
-              scale: 1.04,
-              boxShadow: "0 20px 45px rgba(255,255,255,0.12)",
-            }}
+            whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
-            className="group flex items-center gap-3 rounded-2xl bg-white px-7 py-4 font-extrabold text-slate-950 shadow-2xl"
+            className="group flex shrink-0 items-center gap-4 rounded-2xl bg-white px-7 py-4 font-extrabold text-slate-950 shadow-2xl"
           >
-            <Download className="h-5 w-5 text-orange-500 transition group-hover:scale-110" />
-            Instalar desde Google Play
+            <Download className="h-6 w-6 text-orange-500 transition group-hover:scale-110" />
+            <div className="text-left">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                Disponible en
+              </p>
+              <p className="text-base font-black">Google Play</p>
+            </div>
           </motion.a>
         </div>
       </section>
 
-      {/* Pasos */}
-      <section className="relative z-10 bg-white/70 py-24 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-6">
-          <div className="mb-16 text-center">
-            <span className="inline-flex rounded-full bg-orange-50 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-orange-600">
-              Cómo funciona
-            </span>
-            <h3 className="mt-4 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
-              Tu pedido en 3 pasos
-            </h3>
-            <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-slate-500 md:text-lg">
-              Un flujo rápido, claro y visual para que todo se sienta moderno.
-            </p>
-          </div>
-
-          <div className="grid gap-8 md:grid-cols-3">
-            {[
-              {
-                icon: <Smartphone className="h-8 w-8" />,
-                title: "1. Explora",
-                desc: "Navega productos con una experiencia más limpia, visual y rápida.",
-                bg: "from-blue-50 to-cyan-50",
-                color: "text-blue-600",
-              },
-              {
-                icon: <CheckCircle2 className="h-8 w-8" />,
-                title: "2. Confirma",
-                desc: "Selecciona tu pedido y valida tus datos de forma sencilla.",
-                bg: "from-violet-50 to-fuchsia-50",
-                color: "text-violet-600",
-              },
-              {
-                icon: <Bike className="h-8 w-8" />,
-                title: "3. Recibe",
-                desc: "Te llevamos la compra hasta tu ubicación con mayor comodidad.",
-                bg: "from-green-50 to-emerald-50",
-                color: "text-green-600",
-              },
-            ].map((item) => (
-              <motion.div
-                key={item.title}
-                whileHover={cardHover.whileHover}
-                transition={cardHover.transition}
-                className="group relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white p-8 shadow-[0_18px_60px_rgba(15,23,42,0.06)]"
-              >
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500" />
-                <div
-                  className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${item.bg} ${item.color} transition group-hover:scale-110`}
-                >
-                  {item.icon}
-                </div>
-                <h4 className="text-2xl font-black tracking-tight text-slate-950">
-                  {item.title}
-                </h4>
-                <p className="mt-3 text-sm leading-7 text-slate-500">
-                  {item.desc}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA final */}
+      {/* ── CTA final ── */}
       <section className="relative z-10 px-6 py-24">
-        <div className="mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] border border-white/60 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 p-10 text-white shadow-[0_30px_90px_rgba(249,115,22,0.25)] md:p-14">
+        <div className="mx-auto max-w-5xl overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-orange-500 via-red-500 to-rose-500 p-10 text-white shadow-[0_30px_90px_rgba(249,115,22,0.25)] md:p-14">
           <div className="flex flex-col items-center justify-between gap-8 md:flex-row">
-            <div className="max-w-2xl text-center md:text-left">
-              <span className="rounded-full bg-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.22em]">
-                Bodega Jormard
-              </span>
-              <h3 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">
-                Pide fácil. Pide rápido. Pide premium.
-              </h3>
+            <div className="max-w-xl text-center md:text-left">
+              <h2 className="text-3xl font-black tracking-tight md:text-[2.6rem] md:leading-[1.1]">
+                ¿Te falta algo en casa?
+              </h2>
               <p className="mt-4 text-white/85 md:text-lg">
-                Una landing más visual, más animada y con mejor presencia para tu
-                app y tu negocio.
+                Haz tu pedido ahora y te lo llevamos. O escríbenos por WhatsApp
+                si prefieres coordinarlo directo.
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link href="/login">
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+              <Link href="/login" className="w-full sm:w-auto">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.96 }}
-                  className="rounded-2xl bg-white px-7 py-4 font-extrabold text-slate-950 shadow-2xl"
+                  className="w-full rounded-2xl bg-white px-7 py-4 font-extrabold text-slate-950 shadow-2xl"
                 >
-                  Entrar al sistema
+                  Pedir ahora
                 </motion.button>
               </Link>
-
               <motion.a
-                href={PLAY_STORE_URL}
+                href={WHATSAPP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.96 }}
-                className="rounded-2xl border border-white/30 bg-white/10 px-7 py-4 font-extrabold text-white backdrop-blur-xl"
+                className="w-full rounded-2xl border border-white/30 bg-white/10 px-7 py-4 text-center font-extrabold text-white backdrop-blur-xl sm:w-auto"
               >
-                Descargar app
+                WhatsApp
               </motion.a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* ── Footer ── */}
       <footer className="relative z-10 border-t border-slate-200/70 bg-white/85 px-6 py-10 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 p-2 text-white">
+            <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 p-2 text-white">
               <Store className="h-4 w-4" />
             </div>
             <div>
               <p className="font-black text-slate-950">Bodega Jormard</p>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                © 2026
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                © 2026 · NeyraDev
               </p>
             </div>
           </div>
 
           <div className="flex flex-col items-center gap-3 text-sm font-semibold text-slate-500 md:flex-row md:gap-6">
             <span className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" /> Ferreñafe
+              <MapPin className="h-4 w-4" /> Ferreñafe, Lambayeque
             </span>
-            <span className="flex items-center gap-2">
+            <a href="tel:961241085" className="flex items-center gap-2 transition hover:text-orange-600">
               <Phone className="h-4 w-4" /> 961 241 085
-            </span>
+            </a>
           </div>
 
-          <div className="flex items-center gap-5 text-sm font-semibold text-slate-500">
-            <button
-              onClick={() => setShowPolicy(true)}
-              className="transition hover:text-orange-600"
-            >
-              Privacidad
-            </button>
-            <span>Diseño premium</span>
-          </div>
+          <button
+            onClick={() => setShowPolicy(true)}
+            className="text-sm font-semibold text-slate-500 transition hover:text-orange-600"
+          >
+            Políticas de privacidad
+          </button>
         </div>
       </footer>
 
-      {/* WhatsApp */}
+      {/* ── WhatsApp ── */}
       <motion.a
-        href="https://wa.me/51961241085"
+        href={WHATSAPP_URL}
         target="_blank"
         rel="noopener noreferrer"
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.92 }}
-        className="group fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full border-4 border-white bg-[#25D366] px-4 py-3 text-white shadow-[0_20px_45px_rgba(37,211,102,0.35)]"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full border-4 border-white bg-[#25D366] px-4 py-3 text-white shadow-[0_20px_45px_rgba(37,211,102,0.35)]"
       >
         <MessageCircle className="h-6 w-6" />
         <span className="hidden pr-1 text-sm font-bold md:block">WhatsApp</span>
       </motion.a>
 
-      {/* Modal */}
+      {/* ── Modal de privacidad ── */}
       <AnimatePresence>
         {showPolicy && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -660,27 +692,26 @@ export default function Home() {
             />
 
             <motion.div
-              initial={{ opacity: 0, y: 35, scale: 0.96 }}
+              initial={{ opacity: 0, y: 32, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 35, scale: 0.96 }}
-              transition={{ duration: 0.28 }}
-              className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-white/20 bg-white shadow-[0_35px_100px_rgba(15,23,42,0.28)]"
+              exit={{ opacity: 0, y: 32, scale: 0.96 }}
+              transition={{ duration: 0.26 }}
+              className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_35px_100px_rgba(15,23,42,0.28)]"
             >
-              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 p-6 backdrop-blur-xl">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 p-6">
                 <div className="flex items-center gap-3">
                   <div className="rounded-2xl bg-orange-100 p-2.5 text-orange-600">
                     <Shield className="h-5 w-5" />
                   </div>
                   <div>
                     <h2 className="text-lg font-black text-slate-950">
-                      Políticas de Privacidad
+                      Políticas de privacidad
                     </h2>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Seguridad y confianza
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      Qué datos usamos y para qué
                     </p>
                   </div>
                 </div>
-
                 <button
                   onClick={() => setShowPolicy(false)}
                   className="rounded-full p-2 transition hover:bg-slate-100"
@@ -690,42 +721,51 @@ export default function Home() {
               </div>
 
               <div className="space-y-6 overflow-y-auto p-8 text-sm leading-7 text-slate-600">
-                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-800">
-                  <strong>Nota:</strong> Cumplimos con buenas prácticas de
-                  seguridad para proteger la información del usuario.
-                </div>
-
                 <section>
                   <h3 className="mb-2 text-base font-black text-slate-950">
-                    1. Información que recolectamos
+                    1. Qué información pedimos
                   </h3>
                   <p>
-                    Solo solicitamos los datos necesarios para completar tu
-                    pedido: nombre, teléfono y dirección de entrega.
+                    Solo lo necesario para completar tu pedido: nombre, teléfono,
+                    correo y la dirección de entrega. Si pagas con Yape o Plin,
+                    guardamos la captura del pago que tú subes.
                   </p>
                 </section>
 
                 <section>
                   <h3 className="mb-2 text-base font-black text-slate-950">
-                    2. Uso de los datos
+                    2. Para qué la usamos
                   </h3>
                   <p>
-                    Utilizamos tu información únicamente para gestionar pedidos,
-                    coordinar entregas y mejorar la experiencia del servicio.
+                    Para preparar y entregar tus pedidos, avisarte cuando cambian
+                    de estado y emitir tu comprobante. Nada más.
                   </p>
                 </section>
 
                 <section>
                   <h3 className="mb-2 text-base font-black text-slate-950">
-                    3. Eliminación de datos
+                    3. Con quién la compartimos
                   </h3>
                   <p>
-                    No compartimos tus datos con terceros. Si deseas eliminar tu
-                    información, puedes escribir a{" "}
-                    <span className="font-bold text-slate-900">
-                      soporte@bodegajormard.com
-                    </span>
-                    .
+                    Con nadie. No vendemos ni cedemos tus datos a terceros.
+                  </p>
+                </section>
+
+                <section>
+                  <h3 className="mb-2 text-base font-black text-slate-950">
+                    4. Cómo eliminar tus datos
+                  </h3>
+                  <p>
+                    Escríbenos por{" "}
+                    <a
+                      href={WHATSAPP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold text-emerald-600 underline"
+                    >
+                      WhatsApp al 961 241 085
+                    </a>{" "}
+                    y borramos tu cuenta y tu historial de pedidos.
                   </p>
                 </section>
               </div>
@@ -735,7 +775,7 @@ export default function Home() {
                   onClick={() => setShowPolicy(false)}
                   className="rounded-xl bg-slate-950 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-black"
                 >
-                  Cerrar
+                  Entendido
                 </button>
               </div>
             </motion.div>

@@ -356,12 +356,47 @@ const WalletPaymentWeb = ({ name, color, voucherFile, onUpload, onCopyNumber }: 
 // ══════════════════════════════════════════════════════════
 // FAQ ITEM
 // ══════════════════════════════════════════════════════════
-const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
-  const [expanded, setExpanded] = useState(false);
+// Versión del producto (misma que la app Android, para que el cliente vea lo mismo)
+const APP_VERSION = '1.2.1';
+
+const PREGUNTAS: { categoria: string; pregunta: string; respuesta: string }[] = [
+  { categoria: 'Pedidos', pregunta: '¿Cómo hago un pedido?', respuesta: 'Agrega los productos al carrito, elige si lo quieres por delivery o para recojo en tienda, y confirma. Te daremos un número de pedido para seguirlo.' },
+  { categoria: 'Pedidos', pregunta: '¿Cómo sigo mi pedido?', respuesta: 'En «Pedidos» ves el avance en vivo: Recibido → Pagado → Preparando → Enviado. La campana también te avisa cuando cambia algo.' },
+  { categoria: 'Pedidos', pregunta: '¿Puedo cancelar mi pedido?', respuesta: 'Sí, mientras el estado siga en «Pendiente». Si ya lo estamos preparando, escríbenos por WhatsApp y vemos qué se puede hacer.' },
+  { categoria: 'Pagos', pregunta: '¿Qué formas de pago aceptan?', respuesta: 'Efectivo contra entrega, Yape y Plin. No trabajamos con tarjeta.' },
+  { categoria: 'Pagos', pregunta: '¿Cómo envío mi comprobante de Yape o Plin?', respuesta: 'Al confirmar el pedido puedes subir la captura del pago. Nosotros la revisamos y el estado pasa a «Pago confirmado».' },
+  { categoria: 'Pagos', pregunta: '¿Me dan comprobante de mi compra?', respuesta: 'Sí. En «Comprobantes» puedes ver el detalle de cada pedido, descargarlo en PDF o compartirlo.' },
+  { categoria: 'Entrega', pregunta: '¿Cuánto demora la entrega?', respuesta: 'Entre 30 y 45 minutos, según la zona de Ferreñafe y la cantidad de pedidos del momento.' },
+  { categoria: 'Entrega', pregunta: '¿Puedo recoger en la tienda?', respuesta: 'Claro. Al confirmar el pedido elige «Recojo en tienda» y te avisamos apenas esté listo.' },
+  { categoria: 'Entrega', pregunta: '¿Hacen devoluciones?', respuesta: 'Solo si el producto llegó en mal estado. Repórtalo apenas lo recibas y lo cambiamos.' },
+  { categoria: 'Cuenta', pregunta: '¿Puedo entrar con mi huella?', respuesta: 'Sí. Actívalo en Configuración → Seguridad. Confirmas tu contraseña una vez y listo.' },
+  { categoria: 'Cuenta', pregunta: '¿Cómo cambio mi correo o contraseña?', respuesta: 'Desde «Perfil», en la sección «Cuenta y acceso».' },
+];
+
+const FAQItem = ({ question, answer, categoria }: { question: string, answer: string, categoria?: string }) => {
+  const [abierto, setAbierto] = useState(false);
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all hover:border-slate-300">
-      <button onClick={() => setExpanded(!expanded)} className="w-full flex justify-between items-center p-5 text-left font-bold text-slate-800 text-sm">{question}<motion.div animate={{ rotate: expanded ? 180 : 0 }}><ChevronDown className="w-5 h-5 text-slate-400"/></motion.div></button>
-      <AnimatePresence>{expanded && (<motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}><div className="px-5 pb-5 text-sm text-slate-500 leading-relaxed font-medium">{answer}</div></motion.div>)}</AnimatePresence>
+    <div className={`rounded-2xl bg-white border overflow-hidden transition-all ${abierto ? 'border-indigo-300 shadow-sm' : 'border-slate-100 hover:border-slate-200'}`}>
+      <button onClick={() => setAbierto(!abierto)} className="w-full flex items-start gap-3 p-5 text-left">
+        <div className="flex-1 min-w-0">
+          {categoria && <p className="text-[9px] font-black text-indigo-500 tracking-widest mb-1">{categoria.toUpperCase()}</p>}
+          <p className="font-bold text-slate-900 text-sm leading-snug">{question}</p>
+        </div>
+        <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition ${abierto ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${abierto ? 'rotate-180' : ''}`} />
+        </span>
+      </button>
+      <AnimatePresence>
+        {abierto && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="px-5 pb-5">
+              <div className="border-t border-slate-100 pt-3.5">
+                <p className="text-[13px] text-slate-500 leading-relaxed">{answer}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -396,6 +431,8 @@ export default function ClientCatalog() {
   const [currentPage, setCurrentPage] = useState(1);
   const [currentView, setCurrentView] = useState<'store' | 'favorites' | 'orders' | 'boletas' | 'profile' | 'support' | 'settings' | 'about'>('store');
   const [boletaSel, setBoletaSel] = useState<number | null>(null);
+  const [faqBusqueda, setFaqBusqueda] = useState('');
+  const [faqCat, setFaqCat] = useState('Todas');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -1346,7 +1383,120 @@ export default function ClientCatalog() {
           </button>
         </div>
       );
-      case 'support': return (<div className="max-w-lg mx-auto pb-32"><div className="flex items-center gap-3 mb-8"><div className="p-3 bg-green-50 rounded-2xl"><HelpCircle className="w-6 h-6 text-green-600"/></div><h2 className="text-3xl font-black text-slate-900">Ayuda y Soporte</h2></div><div className="space-y-6"><div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 rounded-[32px] shadow-lg shadow-green-200 text-center text-white relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl -mr-10 -mt-10"></div><div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><MessageCircle className="w-10 h-10 text-white"/></div><h3 className="font-black text-2xl mb-2">¿Necesitas ayuda?</h3><p className="text-green-100 text-sm mb-8">Nuestro equipo está listo por WhatsApp.</p><div className="flex gap-4"><button onClick={() => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=Hola,%20tengo%20una%20consulta`, '_blank')} className="flex-1 py-4 bg-white text-green-600 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><MessageCircle className="w-5 h-5"/> WhatsApp</button><button onClick={() => window.open('tel:961241085')} className="flex-1 py-4 bg-black/20 text-white rounded-xl font-bold flex items-center justify-center gap-2 backdrop-blur-md"><Smartphone className="w-5 h-5"/> Llamar</button></div></div><div><h3 className="font-black text-slate-900 mb-4 ml-1 text-lg">Preguntas Frecuentes</h3><div className="space-y-3"><FAQItem question="¿Cuál es el tiempo de entrega?" answer="30 a 45 minutos dependiendo de la zona." /><FAQItem question="¿Métodos de pago?" answer="Efectivo, Yape, Plin y Tarjeta de débito/crédito." /><FAQItem question="¿Puedo cancelar mi pedido?" answer="Solo si el estado es 'Pendiente'. Si ya está en camino, contáctanos." /></div></div></div></div>);
+      case 'support': {
+        const wa = (txt: string) => window.open(`https://api.whatsapp.com/send?phone=51961241085&text=${encodeURIComponent(txt)}`, '_blank');
+        const cats = ['Todas', ...Array.from(new Set(PREGUNTAS.map(p => p.categoria)))];
+        const filtradas = PREGUNTAS.filter(p =>
+          (faqCat === 'Todas' || p.categoria === faqCat) &&
+          (!faqBusqueda.trim() ||
+            p.pregunta.toLowerCase().includes(faqBusqueda.toLowerCase()) ||
+            p.respuesta.toLowerCase().includes(faqBusqueda.toLowerCase()))
+        );
+
+        return (
+          <div className="max-w-2xl mx-auto pb-32">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-emerald-50 rounded-2xl"><HelpCircle className="w-6 h-6 text-emerald-600"/></div>
+              <div>
+                <h2 className="text-3xl font-black text-slate-900 leading-tight">Ayuda y Soporte</h2>
+                <p className="text-sm font-medium text-slate-500">Resolvemos tus dudas</p>
+              </div>
+            </div>
+
+            {/* ---- HERO ---- */}
+            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 p-7 mb-6">
+              <div className="absolute -top-14 -right-10 w-52 h-52 bg-white/10 rounded-full blur-2xl" />
+              <div className="relative flex items-center gap-4 mb-6">
+                <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center shrink-0"><MessageCircle className="w-7 h-7 text-white"/></div>
+                <div>
+                  <p className="text-xl font-black text-white leading-tight">¿Necesitas ayuda?</p>
+                  <p className="text-sm text-white/70 font-medium">Te respondemos por WhatsApp</p>
+                </div>
+              </div>
+              <div className="relative flex flex-col sm:flex-row gap-3">
+                <button onClick={() => wa('Hola, tengo una consulta')} className="flex-1 py-3.5 rounded-2xl bg-[#25D366] hover:bg-[#1eb958] text-white font-black flex items-center justify-center gap-2 transition active:scale-[0.98]">
+                  <MessageCircle className="w-5 h-5"/> WhatsApp
+                </button>
+                <button onClick={() => window.open('tel:961241085')} className="flex-1 py-3.5 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-black flex items-center justify-center gap-2 transition active:scale-[0.98] backdrop-blur-sm">
+                  <Smartphone className="w-5 h-5"/> Llamar
+                </button>
+              </div>
+            </motion.div>
+
+            {/* ---- CONTACTO ---- */}
+            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="bg-white rounded-[26px] border border-slate-100 overflow-hidden mb-7">
+              <p className="px-6 pt-5 pb-2 text-[11px] font-black text-slate-400 uppercase tracking-widest">Contacto directo</p>
+              <button onClick={() => wa('Hola, tengo una consulta')} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+                <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600"><MessageCircle className="w-5 h-5"/></div>
+                <div className="flex-1"><p className="font-bold text-slate-800">WhatsApp</p><p className="text-xs text-slate-500">961 241 085 · lo más rápido</p></div>
+                <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+              </button>
+              <div className="mx-6 border-t border-slate-100" />
+              <button onClick={() => window.open('tel:961241085')} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+                <div className="p-2.5 bg-sky-50 rounded-xl text-sky-600"><Smartphone className="w-5 h-5"/></div>
+                <div className="flex-1"><p className="font-bold text-slate-800">Llamar a la bodega</p><p className="text-xs text-slate-500">961 241 085</p></div>
+                <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+              </button>
+              <div className="mx-6 border-t border-slate-100" />
+              <button onClick={() => window.open('https://www.google.com/maps/search/?api=1&query=-6.639866,-79.799463', '_blank')} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+                <div className="p-2.5 bg-orange-50 rounded-xl text-orange-600"><MapPin className="w-5 h-5"/></div>
+                <div className="flex-1"><p className="font-bold text-slate-800">Dónde estamos</p><p className="text-xs text-slate-500">Ferreñafe, Lambayeque</p></div>
+                <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+              </button>
+            </motion.div>
+
+            {/* ---- FAQ ---- */}
+            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1 mb-3">Preguntas frecuentes</p>
+
+            <div className="relative mb-3">
+              <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400"/>
+              <input
+                type="text"
+                value={faqBusqueda}
+                onChange={e => setFaqBusqueda(e.target.value)}
+                placeholder="Busca tu duda…"
+                className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-11 text-sm font-medium outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition"
+              />
+              {faqBusqueda && (
+                <button onClick={() => setFaqBusqueda('')} className="absolute right-3 top-3 p-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
+              )}
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 mb-4">
+              {cats.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setFaqCat(c)}
+                  className={`px-4 py-2 rounded-full text-[13px] font-bold whitespace-nowrap border transition ${faqCat === c ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            {filtradas.length === 0 ? (
+              <div className="text-center py-12">
+                <Search className="w-11 h-11 text-slate-300 mx-auto mb-3"/>
+                <p className="font-bold text-slate-600 text-sm">No encontramos esa duda</p>
+                <p className="text-xs text-slate-400 mt-1">Escríbenos y te ayudamos</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filtradas.map(f => <FAQItem key={f.pregunta} question={f.pregunta} answer={f.respuesta} categoria={f.categoria} />)}
+              </div>
+            )}
+
+            {/* ---- PIE ---- */}
+            <div className="bg-white rounded-[24px] border border-slate-100 p-7 text-center mt-7">
+              <p className="font-black text-slate-900">¿No resolvimos tu duda?</p>
+              <p className="text-[13px] text-slate-400 mt-1 mb-5">Escríbenos por WhatsApp y te atendemos al toque.</p>
+              <button onClick={() => wa('Hola, tengo una consulta sobre la app')} className="w-full py-3.5 rounded-2xl bg-[#25D366] hover:bg-[#1eb958] text-white font-black flex items-center justify-center gap-2 transition active:scale-[0.98]">
+                <MessageCircle className="w-5 h-5"/> Escribir por WhatsApp
+              </button>
+            </div>
+          </div>
+        );
+      }
       case 'settings': return (
         <div className="max-w-lg mx-auto pb-32">
           <div className="flex items-center gap-3 mb-8">
@@ -1445,7 +1595,87 @@ export default function ClientCatalog() {
           <p className="text-center text-xs font-medium text-slate-400">Bodega Jormard · Ferreñafe</p>
         </div>
       );
-      case 'about': return (<div className="max-w-lg mx-auto pb-32 text-center pt-10"><div className="bg-white p-12 rounded-[40px] shadow-xl shadow-slate-200 border border-slate-100 inline-block mb-10 relative overflow-hidden"><div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 via-pink-500 to-indigo-500"></div><div className="bg-slate-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><Store className="w-12 h-12 text-slate-900"/></div><h1 className="text-3xl font-black text-slate-900 mb-1">Bodega Jormard</h1><p className="text-slate-500">Tu tienda en el bolsillo</p><span className="inline-block mt-6 px-4 py-1.5 bg-slate-100 rounded-full text-xs font-bold text-slate-600">v2.5.0</span></div><button onClick={() => window.open('https://bodega-jormard.vercel.app', '_blank')} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl mb-8 hover:bg-indigo-600 shadow-xl shadow-slate-200 active:scale-95">Visitar Sitio Web</button><p className="text-xs text-slate-400">© 2026 Jormard Inc.</p></div>);
+      case 'about': return (
+        <div className="max-w-lg mx-auto pb-32">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-3 bg-slate-100 rounded-2xl"><Info className="w-6 h-6 text-slate-700"/></div>
+            <div>
+              <h2 className="text-3xl font-black text-slate-900 leading-tight">Acerca de</h2>
+              <p className="text-sm font-medium text-slate-500">Sobre esta aplicación</p>
+            </div>
+          </div>
+
+          {/* ---- TARJETA DE LA APP ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 px-6 py-9 text-center mb-6">
+            <div className="absolute -top-16 -right-12 w-56 h-56 bg-white/10 rounded-full blur-3xl" />
+            <div className="absolute -bottom-20 -left-10 w-52 h-52 bg-fuchsia-400/15 rounded-full blur-3xl" />
+            <div className="relative">
+              <div className="w-24 h-24 rounded-3xl bg-white shadow-2xl mx-auto flex items-center justify-center p-3.5">
+                <img src="/icon-512.png" alt="Bodega Jormard" className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              </div>
+              <h3 className="text-2xl font-black text-white mt-5">Bodega Jormard</h3>
+              <p className="text-sm text-white/70 font-medium mt-1">Tu bodega de confianza en Ferreñafe</p>
+              <div className="inline-flex items-center gap-2 mt-5 px-4 py-1.5 bg-white/15 rounded-full backdrop-blur-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-[11.5px] font-bold text-white">Versión {APP_VERSION}</span>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* ---- INFORMACIÓN ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="bg-white rounded-[26px] border border-slate-100 overflow-hidden mb-5">
+            <p className="px-6 pt-5 pb-2 text-[11px] font-black text-slate-400 uppercase tracking-widest">Información</p>
+            <div className="px-6 py-4 flex items-center gap-4">
+              <div className="p-2.5 bg-slate-100 rounded-xl text-slate-500"><Store className="w-5 h-5"/></div>
+              <div><p className="text-[10px] font-black text-slate-400 tracking-wide">NEGOCIO</p><p className="font-bold text-slate-900 text-sm">Bodega Jormard · Ferreñafe, Lambayeque</p></div>
+            </div>
+            <div className="mx-6 border-t border-slate-100" />
+            <div className="px-6 py-4 flex items-center gap-4">
+              <div className="p-2.5 bg-slate-100 rounded-xl text-slate-500"><Sparkles className="w-5 h-5"/></div>
+              <div><p className="text-[10px] font-black text-slate-400 tracking-wide">DESARROLLADO POR</p><p className="font-bold text-slate-900 text-sm">NeyraDev</p></div>
+            </div>
+            <div className="mx-6 border-t border-slate-100" />
+            <div className="px-6 py-4 flex items-center gap-4">
+              <div className="p-2.5 bg-slate-100 rounded-xl text-slate-500"><Smartphone className="w-5 h-5"/></div>
+              <div><p className="text-[10px] font-black text-slate-400 tracking-wide">VERSIÓN</p><p className="font-bold text-slate-900 text-sm">v{APP_VERSION}</p></div>
+            </div>
+          </motion.div>
+
+          {/* ---- ENLACES ---- */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="bg-white rounded-[26px] border border-slate-100 overflow-hidden mb-8">
+            <p className="px-6 pt-5 pb-2 text-[11px] font-black text-slate-400 uppercase tracking-widest">Enlaces</p>
+            <button onClick={() => window.open('https://bodegajormard.com', '_blank')} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+              <div className="p-2.5 bg-sky-50 rounded-xl text-sky-600"><Home className="w-5 h-5"/></div>
+              <div className="flex-1"><p className="font-bold text-slate-800">Visitar el sitio web</p><p className="text-xs text-slate-500">bodegajormard.com</p></div>
+              <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+            </button>
+            <div className="mx-6 border-t border-slate-100" />
+            <button onClick={() => window.open('https://play.google.com/store/apps/details?id=com.jormard.bodega', '_blank')} className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left">
+              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600"><Star className="w-5 h-5"/></div>
+              <div className="flex-1"><p className="font-bold text-slate-800">Descargar la app</p><p className="text-xs text-slate-500">Disponible en Google Play</p></div>
+              <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+            </button>
+            <div className="mx-6 border-t border-slate-100" />
+            <button
+              onClick={async () => {
+                const datos = { title: 'Bodega Jormard', text: 'Pide en Bodega Jormard 🛒', url: 'https://bodegajormard.com' };
+                if (navigator.share) { try { await navigator.share(datos); } catch {} }
+                else { await navigator.clipboard.writeText(datos.url); showToast("Enlace copiado", 'success'); }
+              }}
+              className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left"
+            >
+              <div className="p-2.5 bg-purple-50 rounded-xl text-purple-600"><Share2 className="w-5 h-5"/></div>
+              <div className="flex-1"><p className="font-bold text-slate-800">Recomendar la bodega</p><p className="text-xs text-slate-500">Comparte el enlace con tus contactos</p></div>
+              <ChevronRightIcon className="w-5 h-5 text-slate-300"/>
+            </button>
+          </motion.div>
+
+          <div className="text-center">
+            <p className="text-xs font-medium text-slate-400">Hecho con 💛 en Ferreñafe</p>
+            <p className="text-[10.5px] text-slate-300 mt-1.5">© 2026 NeyraDev · Todos los derechos reservados</p>
+          </div>
+        </div>
+      );
       default: return null;
     }
   };
